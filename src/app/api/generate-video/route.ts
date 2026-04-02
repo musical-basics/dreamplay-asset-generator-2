@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGoogleAI } from '@/lib/google-ai';
 
+const VEO_MODEL = 'veo-2.0-generate-001';
+
 export async function POST(req: NextRequest) {
     try {
-        const { prompt, modelId, aspectRatio, durationSeconds } = await req.json();
+        const { prompt, aspectRatio, durationSeconds } = await req.json();
 
-        if (!prompt || !modelId) {
-            return NextResponse.json({ error: 'Missing prompt or modelId' }, { status: 400 });
+        if (!prompt) {
+            return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
         }
 
         const ai = getGoogleAI();
 
+        // Video generation always uses Veo — never pass a Gemini image model here
         const operation = await ai.models.generateVideos({
-            model: modelId,
+            model: VEO_MODEL,
             prompt,
             config: {
                 aspectRatio: aspectRatio || '16:9',
@@ -20,7 +23,6 @@ export async function POST(req: NextRequest) {
             },
         });
 
-        // Return the operation name for polling
         return NextResponse.json({
             success: true,
             operationName: operation.name,

@@ -16,7 +16,12 @@ node_modules/
 npm-debug.log*
 
 # Generated assets (keep the folder, ignore generated files)
-public/generated/
+public/generated/**
+!public/generated/.gitkeep
+
+# Local product image library (large files, not committed)
+public/product-images/**
+!public/product-images/.gitkeep
 
 # Repomix output
 repomix-output*.xml
