@@ -1,0 +1,30 @@
+# DreamPlay Asset Generator gitignore
+.env.local
+.env
+
+# Next.js
+.next/
+out/
+build/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Generated assets (keep the folder, ignore generated files)
+public/generated/
+
+# Repomix output
+repomix-output*.xml
+repomix-output*.txt
+*.repomix.xml
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
