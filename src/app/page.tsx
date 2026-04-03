@@ -151,6 +151,9 @@ const PRODUCT_SPECS: { group: string; key: string; options: string[] }[] = [
     { group: 'Center dial material', key: 'dialMaterial', options: ['Metal', 'Premium rubber'] },
     { group: 'Buttons color', key: 'buttonsColor', options: ['Black', 'White', 'Gold'] },
     { group: 'Buttons material', key: 'buttonsMaterial', options: ['Metal', 'Premium rubber'] },
+    // Background
+    { group: 'Background color', key: 'bgColor', options: ['Black', 'White', 'Gold'] },
+    { group: 'Background style', key: 'bgStyle', options: ['Drop shadow', 'Reflective', 'High-end product lighting pop'] },
 ];
 
 // ─── Thumbnail helper ─────────────────────────────────────────────────────────
@@ -210,6 +213,10 @@ export default function HomePage() {
         'Full product': 'Full product shot — the entire instrument fits within the frame with breathing room',
         'Wide': 'Wide shot — product occupies ~55% of frame, environment and background visible',
         'Far': 'Distant / environmental — product is small in frame, wide environment dominates',
+        // Background styles
+        'Drop shadow': 'Clean studio background with a soft, natural drop shadow directly beneath and behind the product — minimalist, crisp, white or dark seamless backdrop',
+        'Reflective': 'Glossy reflective surface below the product — the piano reflects perfectly on a polished floor or table surface, creating a symmetrical mirror-like reflection beneath it',
+        'High-end product lighting pop': 'Dynamic studio lighting with volumetric light rays, dramatic backlight rim glow, and cinematic atmosphere — think Apple or Bang & Olufsen launch campaign photography',
     };
     const buildSpecSuffix = () => {
         const lines = PRODUCT_SPECS
