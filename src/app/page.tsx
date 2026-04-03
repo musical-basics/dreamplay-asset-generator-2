@@ -111,13 +111,77 @@ export default function HomePage() {
     const openFeedback = (job: GenerationJob, e: React.MouseEvent) => { e.stopPropagation(); setFbJob(job); setFbIssues([]); setFbNote(''); };
     const closeFeedback = () => setFbJob(null);
     const toggleIssue = (issue: string) => setFbIssues(prev => prev.includes(issue) ? prev.filter(i => i !== issue) : [...prev, issue]);
+    const rateJob = (jobId: string, rating: 'good' | 'bad') =>
+        setJobs(prev => prev.map(j => j.id === jobId ? { ...j, feedback: rating } : j));
+
     const submitFeedback = async (regenAfter: boolean) => {
         if (!fbJob) return;
         setFbSubmitting(true);
-        const payload = { jobId: fbJob.id, prompt: fbJob.prompt, model: fbJob.modelName, format: fbJob.formatLabel, issues: fbIssues, note: fbNote, regenAfter };
-        try {
-            await fetch('/api/save-generation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, type: 'feedback' }) });
-        } catch { /* ignore */ }
+        rateJob(fbJob.id, 'bad');
+        // Log to dedicated feedback API
+        await fetch('/api/feedback', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jobId: fbJob.id, modelId: fbJob.modelId, prompt: fbJob.prompt,
+                formatLabel: fbJob.formatLabel, issues: fbIssues, note: fbNote, rating: 'bad',
+            }),
+        }).catch(() => {});
+
+        if (regenAfter) {
+            // Build targeted correction suffix based on selected issues
+            const corrections: string[] = [];
+            if (fbIssues.some(i => i.includes('keyboard') || i.includes('key')))
+                corrections.push('CRITICAL FIX: Ensure the exact 2-black-GAP-3-black-GAP piano keyboard pattern. Count every group carefully.');
+            if (fbIssues.includes('Wrong color/finish'))
+                corrections.push('CRITICAL: Use the correct DreamPlay brand colors — matte black chassis, gold/champagne logo, white keys.');
+            if (fbIssues.includes('Logo missing/wrong'))
+                corrections.push('The DreamPlay logo must be clearly visible and correctly placed on the product.');
+            if (fbIssues.includes('Hallucinated elements'))
+                corrections.push('Remove all invented elements. Only depict what is shown in the reference images.');
+            if (fbIssues.includes('Geometry issues'))
+                corrections.push('Correct the product geometry and proportions to match the reference exactly.');
+            if (fbNote) corrections.push(`User note: ${fbNote}`);
+
+            const correctionSuffix = corrections.length
+                ? `\n\n[CORRECTION — PREVIOUS ATTEMPT FAILED: ${corrections.join(' ')}]`
+                : '\n\n[CORRECTION — Please fix issues from the previous generation attempt.]';
+
+            const fmt = OUTPUT_FORMATS.find(f => f.label === fbJob.formatLabel);
+            if (fmt) {
+                const newJobId = `${Date.now()}-${Math.random()}`;
+                const newJob: GenerationJob = {
+                    id: newJobId, batchId: `b-${Date.now()}`,
+                    formatId: fmt.id, formatLabel: fmt.label,
+                    modelId: fbJob.modelId, modelName: fbJob.modelName,
+                    status: 'processing', prompt: fbJob.prompt + correctionSuffix,
+                    createdAt: Date.now(),
+                };
+                setJobs(prev => [newJob, ...prev]);
+                try {
+                    const res = await fetch('/api/generate-image', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            prompt: newJob.prompt, modelId: newJob.modelId,
+                            aspectRatio: fmt.aspectRatio,
+                            refImagePaths: selectedRefPaths,
+                            brandSuffix: brandSuffix ?? undefined,
+                        }),
+                    });
+                    const data = await res.json();
+                    if (data.base64) {
+                        const resultUrl = `data:${data.mimeType || 'image/png'};base64,${data.base64}`;
+                        setJobs(prev => prev.map(j => j.id === newJobId
+                            ? { ...j, status: 'done', resultUrl, completedAt: Date.now() } : j));
+                    } else {
+                        setJobs(prev => prev.map(j => j.id === newJobId
+                            ? { ...j, status: 'error', error: data.error || 'No image' } : j));
+                    }
+                } catch (err) {
+                    setJobs(prev => prev.map(j => j.id === newJobId
+                        ? { ...j, status: 'error', error: String(err) } : j));
+                }
+            }
+        }
         setFbSubmitting(false);
         closeFeedback();
     };
@@ -1323,6 +1387,16 @@ export default function HomePage() {
                                                 {job.status === 'queued' && <span>⏳</span>}
                                                 {job.status === 'error' && <span>⚠</span>}
                                                 <span>{job.status}</span>
+                                            </div>
+                                        )}
+                                        {job.status === 'done' && (
+                                            <div className="strip-feedback">
+                                                <button className={`strip-fb-btn good${job.feedback === 'good' ? ' active' : ''}`}
+                                                    onClick={e => { e.stopPropagation(); rateJob(job.id, 'good'); fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: job.id, modelId: job.modelId, prompt: job.prompt, formatLabel: job.formatLabel, issues: [], rating: 'good' }) }); }}
+                                                    title="Good generation">👍</button>
+                                                <button className={`strip-fb-btn bad${job.feedback === 'bad' ? ' active' : ''}`}
+                                                    onClick={e => openFeedback(job, e)}
+                                                    title="Flag issues">👎</button>
                                             </div>
                                         )}
                                         <div className="strip-label">{job.formatLabel}</div>
