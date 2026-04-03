@@ -31,28 +31,51 @@ const LABEL_COLORS: Record<LabelColor, string> = {
 
 const LABELS: LabelColor[] = ['none', 'red', 'yellow', 'green', 'blue', 'purple'];
 
-// ─── Prompt Presets ────────────────────────────────────────────────────────────
+// ─── Prompt Presets ─────────────────────────────────────────────────────────
+// Structured for Gemini image models: positive/spatial/material language first,
+// [CRITICAL] weight markers on hallucination-prone elements, grouped sections.
 const PRESET_DS60_STARTER =
-`DS 6.0 Black 88-key digital piano, studio product photography.
-Use the provided reference images as ground truth for every physical detail.
-Keyboard: 88 keys, standard layout — black keys in exact 2-GAP-3-GAP repeating groups.
-DreamPlay logo centered below the control panel — black logo on light bg, white logo on dark bg.
-Control panel: two identical round black knobs (Sound, Volume) top-left; rectangular LCD screen center; large center dial with rubber black/white segments and gold metallic ring; six rectangular rubber buttons right of LCD.
-Speaker grills: parallel horizontal grooves, identical left and right, matte black casing.
-Lighting: cinematic studio, soft key light, subtle reflections, dark or gradient background.
-Style: luxury product photography, 8K, photorealistic, premium, minimal.`;
+`[SUBJECT] DreamPlay DS 6.0 — 88-key digital piano. Luxury product photography, photorealistic, 8K detail.
+
+[KEYBOARD — CRITICAL]
+Exact 88-key layout. Black keys arranged in strict 2-key group / gap / 3-key group / gap repeating pattern across the full width. White keys are regular, uniform, evenly spaced. Reproduce the exact key count and grouping from the reference image.
+
+[CONTROL PANEL — follow reference exactly]
+- Top-left: two identical round flat-top knobs (Sound + Volume), matte black rubber, same size, same gap between them
+- Center: rectangular LCD display screen, exact size and position from reference, no added text or graphics
+- Center: large circular dial, patterned rubber surface (alternating black/white sections), gold metallic outer ring
+- Right of LCD: exactly six rectangular rubber buttons in a row, matching reference shapes and spacing; one gold metallic accent button
+
+[LOGO — CRITICAL]
+DreamPlay wordmark logo, exact letterforms from reference. White logo on dark backgrounds. Black logo on light backgrounds. Centered below control panel. Do not alter, distort, or invent characters.
+
+[SPEAKER GRILLS — follow reference exactly]
+Left and right sides of the chassis: clean, evenly-spaced horizontal line grooves (not dots, not mesh, not organic). Both sides identical. Matte black housing.
+
+[LIGHTING & PHOTOGRAPHY]
+Cinematic studio lighting, soft key light from upper-left, subtle fill, controlled specular highlights on surfaces. Dark gradient or solid dark background. Shallow depth of field, subject in crisp focus.
+
+[MATERIALS]
+Chassis: matte black ABS. White keys: gloss ivory. Black keys: matte black. Logo: metallic or printed. Knobs: flat-top matte rubber. Dial outer ring: gold polished metal. Buttons: satin rubber with one gold metallic.`;
 
 const PRESET_NEGATIVE_GUARD =
-`NEGATIVE CONSTRAINTS — DO NOT deviate from any of these:
-DO NOT hallucinate or redesign the DreamPlay logo. Copy it exactly from the reference.
-DO NOT alter the piano keyboard layout. Never space all black keys evenly. Always: 2 blacks, gap, 3 blacks, gap — repeating.
-DO NOT change the two knob shapes, sizes, gap, or style. They are flat-top black rubber cylinders.
-DO NOT resize, reimagine, or add text to the LCD display screen.
-DO NOT change the center dial design. It uses rubber (black/white) and gold metallic — no other material.
-DO NOT add, remove, or reshape the six rectangular rubber buttons.
-DO NOT render the speaker grills as mesh, dots, or organic blobs. They are clean parallel horizontal line grooves, symmetrical left and right.
-DO NOT invent new UI elements, labels, ports, or controls not in the reference.
-DO NOT distort proportions, geometry, or perspective of the keyboard body.`;
+`[ACCURACY CONSTRAINTS — apply to every element]
+
+[KEYBOARD] The black keys MUST follow the 2-gap-3-gap repeating grouping. A piano where all black keys are evenly spaced across the keyboard is WRONG. Reference the uploaded image for exact layout.
+
+[LOGO] Reproduce the DreamPlay logo exactly. Do not invent new letter shapes, do not add taglines, do not resize or reposition, do not substitute a different wordmark.
+
+[KNOBS] The two top-left knobs are identical — same diameter, same height, same material, same gap. Do not add more knobs, do not change their shape to domed or spike-style.
+
+[LCD] The LCD display maintains its exact rectangular dimensions and position. Do not add new labels, do not show user interface graphics, do not resize.
+
+[CENTER DIAL] The large dial has a patterned rubber face (alternating black/white arc segments) with a gold metallic outer ring. Do not simplify to a plain circle. Do not change materials.
+
+[6 BUTTONS] The six rectangular rubber buttons stay in their exact configuration and shapes. Do not add or remove buttons. One is gold metallic — the rest match the housing color.
+
+[SPEAKER GRILLS] Both speaker grills are parallel horizontal grooves — not hexagonal mesh, not circular perforations, not organic texture. Keep them symmetrical and identical left-to-right.
+
+[GEOMETRY] Do not warp, stretch, foreshorten, or distort the keyboard body. Maintain true proportions matching the reference image.`;
 
 
 const FLAG_ICONS: Record<FlagState, string> = {
@@ -1552,6 +1575,36 @@ export default function HomePage() {
                                             {enhancedPrompt}
                                         </div>
                                     )}
+                                    {/* Live Effective Prompt Preview */}
+                                    {(useStarterPreset || useNegativeGuard || Object.values(productSpecs).some(Boolean)) && (() => {
+                                        const base = enhancedPrompt || prompt || '(your prompt here)';
+                                        const presetParts = [
+                                            useStarterPreset ? PRESET_DS60_STARTER : '',
+                                            useNegativeGuard ? PRESET_NEGATIVE_GUARD : '',
+                                        ].filter(Boolean);
+                                        const specLines = PRODUCT_SPECS.filter(s => productSpecs[s.key]).map(s => `${s.group}: ${productSpecs[s.key]}`);
+                                        const specBlock = specLines.length ? `\n\nPRODUCT SPECS (follow strictly):\n${specLines.join('\n')}` : '';
+                                        const fullPrompt = (presetParts.length ? presetParts.join('\n\n') + '\n\n' : '') + base + specBlock;
+                                        return (
+                                            <div style={{
+                                                marginTop: '0.5rem',
+                                                background: 'rgba(255,255,255,0.03)',
+                                                border: '1px solid rgba(255,255,255,0.08)',
+                                                borderRadius: '4px',
+                                                padding: '0.5rem 0.6rem',
+                                                fontSize: '0.6rem',
+                                                lineHeight: 1.6,
+                                                color: 'var(--text-muted)',
+                                                maxHeight: '140px',
+                                                overflowY: 'auto',
+                                                whiteSpace: 'pre-wrap',
+                                                wordBreak: 'break-word',
+                                            }}>
+                                                <div style={{ fontSize: '0.55rem', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.3rem' }}>⚡ Effective Prompt Preview</div>
+                                                {fullPrompt}
+                                            </div>
+                                        );
+                                    })()}
                                     {activeRefCount > 0 && <div className="hint" style={{ marginTop: '0.4rem' }}>✓ {activeRefCount} reference{activeRefCount > 1 ? 's' : ''} will be used</div>}
                                 </div>
                             )}
