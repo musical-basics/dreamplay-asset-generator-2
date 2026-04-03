@@ -31,6 +31,30 @@ const LABEL_COLORS: Record<LabelColor, string> = {
 
 const LABELS: LabelColor[] = ['none', 'red', 'yellow', 'green', 'blue', 'purple'];
 
+// ─── Prompt Presets ────────────────────────────────────────────────────────────
+const PRESET_DS60_STARTER =
+`DS 6.0 Black 88-key digital piano, studio product photography.
+Use the provided reference images as ground truth for every physical detail.
+Keyboard: 88 keys, standard layout — black keys in exact 2-GAP-3-GAP repeating groups.
+DreamPlay logo centered below the control panel — black logo on light bg, white logo on dark bg.
+Control panel: two identical round black knobs (Sound, Volume) top-left; rectangular LCD screen center; large center dial with rubber black/white segments and gold metallic ring; six rectangular rubber buttons right of LCD.
+Speaker grills: parallel horizontal grooves, identical left and right, matte black casing.
+Lighting: cinematic studio, soft key light, subtle reflections, dark or gradient background.
+Style: luxury product photography, 8K, photorealistic, premium, minimal.`;
+
+const PRESET_NEGATIVE_GUARD =
+`NEGATIVE CONSTRAINTS — DO NOT deviate from any of these:
+DO NOT hallucinate or redesign the DreamPlay logo. Copy it exactly from the reference.
+DO NOT alter the piano keyboard layout. Never space all black keys evenly. Always: 2 blacks, gap, 3 blacks, gap — repeating.
+DO NOT change the two knob shapes, sizes, gap, or style. They are flat-top black rubber cylinders.
+DO NOT resize, reimagine, or add text to the LCD display screen.
+DO NOT change the center dial design. It uses rubber (black/white) and gold metallic — no other material.
+DO NOT add, remove, or reshape the six rectangular rubber buttons.
+DO NOT render the speaker grills as mesh, dots, or organic blobs. They are clean parallel horizontal line grooves, symmetrical left and right.
+DO NOT invent new UI elements, labels, ports, or controls not in the reference.
+DO NOT distort proportions, geometry, or perspective of the keyboard body.`;
+
+
 const FLAG_ICONS: Record<FlagState, string> = {
     pick: '⚑', unflagged: '⚐', reject: '✕',
 };
@@ -1323,6 +1347,16 @@ export default function HomePage() {
                                         ))}
                                     </div>
                                     )}
+                                    {/* ── Prompt Presets ── */}
+                                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '0.15rem' }}>Presets:</span>
+                                        <button className="brand-tag" title="Insert DS 6.0 starter prompt"
+                                            onClick={() => setPrompt(p => (p.trim() ? p.trim() + '\n\n' : '') + PRESET_DS60_STARTER)}>⚡ DS 6.0 Starter</button>
+                                        <button className="brand-tag" title="Append negative constraints to stop hallucinations"
+                                            onClick={() => setPrompt(p => (p.trim() ? p.trim() + '\n\n' : '') + PRESET_NEGATIVE_GUARD)}>🚫 Negative Guard</button>
+                                        <button className="brand-tag" style={{ opacity: 0.5 }} title="Clear prompt"
+                                            onClick={() => setPrompt('')}>✕ Clear</button>
+                                    </div>
                                     <textarea className="lr-textarea" value={prompt} onChange={e => setPrompt(e.target.value)}
                                         placeholder="Describe the image you want to generate…" rows={4} />
                                     <button className="btn btn-ghost btn-sm" style={{ marginTop: '0.4rem', width: '100%', justifyContent: 'center' }}
@@ -1374,6 +1408,18 @@ export default function HomePage() {
                             <div className="strip-batch-label">
                                 <span className="strip-batch-count">{batch.jobs.length} {batch.jobs.length === 1 ? 'asset' : 'assets'}</span>
                                 <span className="strip-batch-prompt">{(batch.jobs[0]?.prompt || '').slice(0, 40)}{(batch.jobs[0]?.prompt || '').length > 40 ? '…' : ''}</span>
+                                {batch.jobs.some(j => j.status === 'processing' || j.status === 'queued') && (
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        style={{ marginLeft: 'auto', fontSize: '0.6rem', opacity: 0.7, padding: '1px 6px' }}
+                                        title="Cancel remaining generations in this batch"
+                                        onClick={() => setJobs(prev => prev.map(j =>
+                                            j.batchId === batch.batchId && (j.status === 'processing' || j.status === 'queued')
+                                                ? { ...j, status: 'error', error: 'Cancelled' }
+                                                : j
+                                        ))}
+                                    >✕ Cancel</button>
+                                )}
                             </div>
                             <div className="strip-batch-items">
                                 {batch.jobs.map(job => (
