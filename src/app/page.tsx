@@ -71,6 +71,19 @@ function fmtDuration(s: number) {
     return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
+// ─── Library asset type (from Media Indexer catalog) ────────────────────────
+interface LibraryAsset {
+    id: string; filePath: string; fileName: string; fileSize: number;
+    mediaType: 'video' | 'image'; durationSeconds: number | null;
+    subject: string; handZone: string | null; dsModel: string | null;
+    purpose: string; campaign: string; shotType: string; finalStatus: string;
+    colorLabel: string | null; priority: string; mood: string;
+    aiDescription: string; aiKeywords: string; thumbPath: string | null;
+    orientation: string | null; width: number | null; height: number | null;
+    codec: string | null; fps: number | null;
+}
+interface LibStats { total: number; finals: number; highPriority: number; }
+
 export default function HomePage() {
     // ─── Core state ───────────────────────────────────────────────────────────────
 
@@ -99,6 +112,89 @@ export default function HomePage() {
     };
 
     const [rightSections, setRightSections] = useState<Set<string>>(new Set(['model', 'formats', 'prompt']));
+
+    // ─── Tab: Generator vs Library ────────────────────────────────────────────────
+    const [activeTab, setActiveTab] = useState<'generator' | 'library'>('generator');
+    const [libAssets, setLibAssets] = useState<LibraryAsset[]>([]);
+    const [libTotal, setLibTotal] = useState(0);
+    const [libStats, setLibStats] = useState<LibStats>({ total: 0, finals: 0, highPriority: 0 });
+    const [libSelected, setLibSelected] = useState<Set<string>>(new Set());
+    const [libLoading, setLibLoading] = useState(false);
+    const [libNotIndexed, setLibNotIndexed] = useState(false);
+    const [libDetail, setLibDetail] = useState<LibraryAsset | null>(null);
+    const [libCopyMsg, setLibCopyMsg] = useState('');
+    const [libExporting, setLibExporting] = useState(false);
+    const [libFilters, setLibFilters] = useState({
+        search: '', finalStatus: '', priority: '', subject: '',
+        handZone: '', dsModel: '', purpose: '', campaign: '',
+        shotType: '', colorLabel: '', mediaType: '', orientation: '',
+    });
+    const libLastClick = useRef<string | null>(null);
+
+    const fetchLibrary = useCallback(async () => {
+        setLibLoading(true);
+        const params = new URLSearchParams();
+        Object.entries(libFilters).forEach(([k, v]) => { if (v) params.set(k, v); });
+        try {
+            const res = await fetch(`/api/media-library?${params}`);
+            const data = await res.json();
+            if (data.notIndexed) { setLibNotIndexed(true); setLibAssets([]); }
+            else { setLibNotIndexed(false); setLibAssets(data.assets ?? []); setLibTotal(data.total ?? 0); setLibStats(data.stats ?? { total: 0, finals: 0, highPriority: 0 }); }
+        } catch { }
+        setLibLoading(false);
+    }, [libFilters]);
+
+    useEffect(() => { if (activeTab === 'library') fetchLibrary(); }, [activeTab, fetchLibrary]);
+
+    function setLibFilter(key: string, value: string) {
+        setLibFilters(prev => ({ ...prev, [key]: (prev as Record<string, string>)[key] === value ? '' : value }));
+    }
+
+    function handleLibClick(asset: LibraryAsset, e: React.MouseEvent) {
+        if (e.shiftKey && libLastClick.current) {
+            const ids = libAssets.map(a => a.id);
+            const li = ids.indexOf(libLastClick.current); const ci = ids.indexOf(asset.id);
+            const [s, en] = li < ci ? [li, ci] : [ci, li];
+            setLibSelected(prev => { const n = new Set(prev); ids.slice(s, en + 1).forEach(id => n.add(id)); return n; });
+        } else if (e.metaKey || e.ctrlKey) {
+            setLibSelected(prev => { const n = new Set(prev); n.has(asset.id) ? n.delete(asset.id) : n.add(asset.id); return n; });
+        } else if (e.altKey) { setLibDetail(asset); }
+        else { setLibSelected(prev => { const n = new Set(prev); n.has(asset.id) ? n.delete(asset.id) : (n.clear(), n.add(asset.id)); return n; }); }
+        libLastClick.current = asset.id;
+    }
+
+    async function handleLibExport(format: 'davinci' | 'fcpxml') {
+        if (!libSelected.size) return;
+        setLibExporting(true);
+        try {
+            const res = await fetch('http://localhost:3001/api/export', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: Array.from(libSelected), format, timelineName: 'DreamPlay Timeline' }),
+            });
+            const blob = await res.blob();
+            const cd = res.headers.get('Content-Disposition') ?? '';
+            const fn = cd.match(/filename="(.+)"/);
+            const filename = fn ? fn[1] : `timeline.${format === 'fcpxml' ? 'fcpxml' : 'xml'}`;
+            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+        } catch (e) { alert('Export failed — make sure the Media Indexer is running at localhost:3001'); console.error(e); }
+        setLibExporting(false);
+    }
+
+    function handleLibCopyPaths() {
+        const sel = libAssets.filter(a => libSelected.has(a.id));
+        navigator.clipboard.writeText(sel.map(a => a.filePath).join('\n'));
+        setLibCopyMsg('Copied!'); setTimeout(() => setLibCopyMsg(''), 2000);
+    }
+
+    const libSelectedAssets = libAssets.filter(a => libSelected.has(a.id));
+    const libTotalDur = libSelectedAssets.reduce((s, a) => s + (a.durationSeconds ?? 0), 0);
+    function libThumbUrl(asset: LibraryAsset) { return asset.thumbPath ? `/api/media-thumb?path=${encodeURIComponent(asset.thumbPath)}` : ''; }
+    function libFmtDur(s: number | null) { if (!s) return ''; return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`; }
+    function libFmtBytes(b: number) { if (b > 1e9) return `${(b / 1e9).toFixed(1)} GB`; if (b > 1e6) return `${(b / 1e6).toFixed(1)} MB`; return `${(b / 1e3).toFixed(0)} KB`; }
+    const LIB_COLORS: Record<string, string> = { red: '#ef4444', orange: '#f97316', yellow: '#eab308', green: '#22c55e', blue: '#3b82f6', purple: '#a855f7', gray: '#6b7280' };
+    const LIB_SUBJECTS = ['hands', 'piano-keys', 'piano-full', 'talking-head', 'lifestyle', 'product', 'abstract', 'mixed'];
+    const LIB_PURPOSES = ['education', 'marketing', 'social-reel', 'product-demo', 'testimonial', 'b-roll'];
+    const LIB_CAMPAIGNS = ['CEO Spotlight', 'Piano Comparison', 'Handspan Measurement', 'La Campanella', 'NAMM', 'Duel Piano', 'Other'];
 
     // ─── Product library ──────────────────────────────────────────────────────────
     const [productLibrary, setProductLibrary] = useState<Record<string, { path: string; name: string }[]>>({});
@@ -574,7 +670,19 @@ export default function HomePage() {
                 <div className="toolbar-left">
                     <div className="toolbar-logo">
                         <div className="logo-mark">🎹</div>
-                        <div><div className="logo-text">DreamPlay</div><div className="logo-sub">Asset Generator</div></div>
+                        <div><div className="logo-text">DreamPlay</div><div className="logo-sub">{activeTab === 'library' ? 'Media Library' : 'Asset Generator'}</div></div>
+                    </div>
+                    <div className="toolbar-divider" />
+                    {/* Tab switcher */}
+                    <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: '3px' }}>
+                        <button
+                            onClick={() => setActiveTab('generator')}
+                            style={{ border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: activeTab === 'generator' ? 'var(--accent)' : 'transparent', color: activeTab === 'generator' ? '#fff' : 'var(--text-muted)' }}
+                        >⚡ Generator</button>
+                        <button
+                            onClick={() => setActiveTab('library')}
+                            style={{ border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: activeTab === 'library' ? '#c9a84c' : 'transparent', color: activeTab === 'library' ? '#000' : 'var(--text-muted)' }}
+                        >🎬 Media Library {libStats.total > 0 && <span style={{ background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '0 4px', marginLeft: 4, fontSize: '0.6rem' }}>{libStats.total}</span>}</button>
                     </div>
                     <div className="toolbar-divider" />
                     <div className="api-status connected">
@@ -583,12 +691,15 @@ export default function HomePage() {
                     </div>
                 </div>
                 <div className="toolbar-center">
-                    <div className="toolbar-breadcrumb">
+                    {activeTab === 'generator' && <div className="toolbar-breadcrumb">
                         <span>Library</span>
                         {!showAllFolders && selectedFolder && <><span className="sep">›</span><span className="current">{selectedFolder}</span></>}
                         {showAllFolders && <><span className="sep">›</span><span className="current">All Folders</span></>}
                         {(previewImage || currentPreviewJob) && <><span className="sep">›</span><span className="current">{currentPreviewJob ? currentPreviewJob.formatName : 'Preview'}</span></>}
-                    </div>
+                    </div>}
+                    {activeTab === 'library' && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        {libStats.finals} finals · {libStats.highPriority} priority
+                    </div>}
                 </div>
                 <div className="toolbar-right" />
             </header>

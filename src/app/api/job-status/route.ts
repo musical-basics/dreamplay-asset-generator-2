@@ -20,7 +20,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ done: true, error: operation.error.message });
         }
 
-        const video = operation.response?.generatedVideos?.[0];
+        // The SDK types `response` as `{}` — cast to the known Veo response shape
+        const responseData = operation.response as unknown as {
+            generatedVideos?: { video?: { uri?: string } }[];
+        } | undefined;
+        const video = responseData?.generatedVideos?.[0];
         if (video?.video?.uri) {
             return NextResponse.json({
                 done: true,

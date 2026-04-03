@@ -64,13 +64,13 @@ export async function GET() {
             .sort()
             .reverse(); // newest first
 
-        const dates: Record<string, object[]> = {};
+        const dates: Record<string, unknown[]> = {};
 
         for (const date of dateFolders) {
             const dir = path.join(GENERATED_DIR, date);
             const files = (await readdir(dir)).filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f));
 
-            const items = await Promise.all(files.map(async (f) => {
+            const items: Record<string, unknown>[] = await Promise.all(files.map(async (f) => {
                 const baseName = f.replace(/\.[^.]+$/, '');
                 const metaPath = path.join(dir, `${baseName}.json`);
                 let meta: Record<string, unknown> = {};
@@ -80,7 +80,7 @@ export async function GET() {
                     fileName: f,
                     date,
                     ...meta,
-                };
+                } as Record<string, unknown>;
             }));
 
             items.sort((a, b) => ((b.createdAt as number) || 0) - ((a.createdAt as number) || 0));

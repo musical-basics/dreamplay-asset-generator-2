@@ -13,6 +13,7 @@ const nextConfig = {
       bodySizeLimit: '50mb',
     },
   },
+  serverExternalPackages: ['better-sqlite3'],
 };
 
 export default nextConfig;
