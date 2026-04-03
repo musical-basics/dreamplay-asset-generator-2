@@ -287,7 +287,15 @@ export default function HomePage() {
         try { return JSON.parse(sessionStorage.getItem('dp_jobs') || '[]'); } catch { return []; }
     });
     const [isGenerating, setIsGenerating] = useState(false);
-    useEffect(() => { sessionStorage.setItem('dp_jobs', JSON.stringify(jobs)); }, [jobs]);
+    useEffect(() => {
+        try {
+            // Strip base64 image data before storing — blows the 5 MB sessionStorage quota.
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const slim = jobs.map(({ resultUrl, resultBase64, ...rest }) => rest);
+            sessionStorage.setItem('dp_jobs', JSON.stringify(slim));
+        } catch { /* quota exceeded — skip persistence */ }
+    }, [jobs]);
+
 
     // ─── Generation history ───────────────────────────────────────────────────────
     const [genHistory, setGenHistory] = useState<HistoryEntry[]>([]);
