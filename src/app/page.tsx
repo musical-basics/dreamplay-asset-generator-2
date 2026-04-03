@@ -74,6 +74,13 @@ function fmtDuration(s: number) {
 // ─── Feedback ──────────────────────────────────────────────────────────────────
 const FEEDBACK_ISSUES = ['Wrong keyboard layout', 'Wrong key count', 'Logo missing/wrong', 'Wrong color/finish', 'Geometry issues', 'Hallucinated elements', 'Poor quality', 'Other'];
 
+// ─── Thumbnail helper ─────────────────────────────────────────────────────────
+// Routes product images through /api/thumb which caches resized WebP permanently.
+// After first generation the browser never re-requests this URL (immutable header).
+function thumbUrl(path: string, w = 320): string {
+    return `/api/thumb?path=${encodeURIComponent(path)}&w=${w}`;
+}
+
 export default function HomePage() {
     // ─── Core state ───────────────────────────────────────────────────────────────
 
@@ -805,7 +812,7 @@ export default function HomePage() {
                                     const role = refTags.get(path);
                                     return (
                                         <div key={path} style={{ aspectRatio: '1', borderRadius: '3px', overflow: 'hidden', position: 'relative', border: '1px solid rgba(10,132,255,0.5)', cursor: 'pointer' }}>
-                                            <img src={path} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" onClick={() => toggleRefSelection(path)} />
+                                            <img src={thumbUrl(path, 200)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" onClick={() => toggleRefSelection(path)} />
                                             {/* role badge */}
                                             <button onClick={e => { e.stopPropagation(); cycleRefTag(path); }}
                                                 style={{ position: 'absolute', bottom: 1, left: 1, border: 'none', borderRadius: 2, padding: '1px 3px', fontSize: '0.44rem', fontWeight: 700, cursor: 'pointer', lineHeight: 1.2, background: role ? REF_ROLE_COLORS[role] : 'rgba(0,0,0,0.55)', color: '#fff' }}>
@@ -1108,7 +1115,7 @@ export default function HomePage() {
                                                                 {videoDurations[img.path] && <div className="thumb-duration">{videoDurations[img.path]}</div>}
                                                             </>
                                                         ) : (
-                                                            <img src={img.path} alt={img.name} loading="lazy" />
+                                                            <img src={thumbUrl(img.path)} alt={img.name} loading="lazy" />
                                                         )}
                                                         {/* Folder badge — only on first image of each folder in All view */}
                                                         {isFirstInFolder && <div className="thumb-folder-badge">{img.folder}</div>}
@@ -1146,7 +1153,7 @@ export default function HomePage() {
                                                             {videoDurations[img.path] && <div className="thumb-duration">{videoDurations[img.path]}</div>}
                                                         </>
                                                     ) : (
-                                                        <img src={img.path} alt={img.name} loading="lazy" />
+                                                        <img src={thumbUrl(img.path)} alt={img.name} loading="lazy" />
                                                     )}
                                                     <div className="thumb-check">✓</div>
                                                     {m.flag === 'pick' && <div className="thumb-flag">⚑</div>}
