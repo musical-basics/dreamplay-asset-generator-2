@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createReadStream, existsSync } from 'fs';
+import { createReadStream, existsSync, statSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 
 const CACHE_DIR = path.join(process.cwd(), '.thumbcache');
 const THUMB_W = 320; // px — enough for the grid, tiny over the wire
+
+// Video extensions — never try to thumbnail these
+const VIDEO_EXTS = new Set(['.mp4', '.mov', '.webm', '.m4v', '.avi', '.mkv']);
+// Max file size we'll pass to sharp (50 MB)
+const MAX_SHARP_BYTES = 50 * 1024 * 1024;
 
 function cacheKey(urlPath: string, w: number): string {
     return crypto
@@ -26,15 +31,27 @@ export async function GET(req: NextRequest) {
     // Security: only serve files inside public/
     const fsPath = path.join(process.cwd(), 'public', decodeURIComponent(urlPath));
     if (!existsSync(fsPath)) {
-        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        return new NextResponse(null, { status: 404 });
     }
 
-    // Check cache
+    // ── Videos: return 415 immediately — never buffer a video into RAM ────────
+    const ext = path.extname(fsPath).toLowerCase();
+    if (VIDEO_EXTS.has(ext)) {
+        return new NextResponse(null, { status: 415, headers: { 'X-Thumb-Skip': 'video' } });
+    }
+
+    // ── File size guard: skip sharp for huge files ────────────────────────────
+    let fileSizeBytes = 0;
+    try { fileSizeBytes = statSync(fsPath).size; } catch { /* ignore */ }
+    if (fileSizeBytes > MAX_SHARP_BYTES) {
+        return new NextResponse(null, { status: 413, headers: { 'X-Thumb-Skip': 'too-large' } });
+    }
+
+    // ── Cache check ───────────────────────────────────────────────────────────
     const thumbName = cacheKey(urlPath, w);
     const thumbPath = path.join(CACHE_DIR, thumbName);
 
     if (!existsSync(thumbPath)) {
-        // Generate thumbnail using sharp
         try {
             const sharp = (await import('sharp')).default;
             await mkdir(CACHE_DIR, { recursive: true });
@@ -44,23 +61,13 @@ export async function GET(req: NextRequest) {
                 .toBuffer();
             await writeFile(thumbPath, buf);
         } catch (err) {
-            // sharp failed (e.g. unsupported format) — stream original
-            console.warn('[thumb] sharp failed, streaming original:', err);
-            const stream = createReadStream(fsPath);
-            const chunks: Buffer[] = [];
-            for await (const chunk of stream) chunks.push(chunk as Buffer);
-            const buf = Buffer.concat(chunks);
-            return new NextResponse(buf, {
-                headers: {
-                    'Content-Type': 'image/jpeg',
-                    'Cache-Control': 'public, max-age=31536000, immutable',
-                },
-            });
+            // sharp failed — return 415, NEVER buffer & stream the original
+            console.warn('[thumb] sharp failed for', path.basename(fsPath), '—', String(err).slice(0, 120));
+            return new NextResponse(null, { status: 415, headers: { 'X-Thumb-Skip': 'sharp-error' } });
         }
     }
 
-    // Serve cached thumbnail with a 1-year immutable cache header
-    // The browser will NEVER re-request this file — true zero-reload
+    // ── Serve cached thumbnail ────────────────────────────────────────────────
     const stream = createReadStream(thumbPath);
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(chunk as Buffer);
