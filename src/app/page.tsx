@@ -267,7 +267,7 @@ export default function HomePage() {
         if (dur && isFinite(dur)) setVideoDurations(prev => ({ ...prev, [path]: fmtDuration(dur) }));
     };
 
-    const [rightSections, setRightSections] = useState<Set<string>>(new Set(['model', 'formats', 'prompt']));
+    const [rightSections, setRightSections] = useState<Set<string>>(new Set(['model', 'formats', 'prompt', 'specs']));
 
     // ─── Feedback state ───────────────────────────────────────────────────
     const [fbJob, setFbJob] = useState<GenerationJob | null>(null);
