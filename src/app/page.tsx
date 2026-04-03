@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { OUTPUT_FORMATS, MODEL_OPTIONS, CATEGORY_LABELS } from '@/lib/output-formats';
 import { DEFAULT_BRAND_CONFIG, BRAND_STYLE_PRESETS } from '@/lib/brand-config';
 import type { OutputFormat, ModelOption, GenerationJob, ReferenceFile, HistoryEntry, SavedOutput } from '@/types';
+import MaskEditor from '@/components/MaskEditor';
 
 function formatTime(ms: number) {
     const s = Math.round(ms / 1000);
@@ -500,6 +501,7 @@ export default function HomePage() {
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
     const [activeStrip, setActiveStrip] = useState<string | null>(null);
+    const [maskEditorJob, setMaskEditorJob] = useState<GenerationJob | null>(null);
     const [thumbSize, setThumbSize] = useState(90); // px for grid columns
     const [selectedGridImage, setSelectedGridImage] = useState<string | null>(null);
     const lastRefClickIdx = useRef<number>(-1); // for Shift+click range
@@ -1294,7 +1296,15 @@ export default function HomePage() {
                                 <button className="btn btn-ghost btn-sm" onClick={() => setActiveStrip(null)}>← Back</button>
                                 <strong>{currentPreviewJob.formatName}</strong>
                                 {currentPreviewJob.status === 'done' && currentPreviewJob.resultUrl && (
-                                    <a href={currentPreviewJob.resultUrl} download className="btn btn-ghost btn-sm">↓ Download</a>
+                                    <>
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            style={{ color: '#facc15', fontWeight: 700 }}
+                                            onClick={() => setMaskEditorJob(currentPreviewJob)}
+                                            title="Open mask editor to fix a specific region"
+                                        >🎭 Mask &amp; Fix</button>
+                                        <a href={currentPreviewJob.resultUrl} download className="btn btn-ghost btn-sm">↓ Download</a>
+                                    </>
                                 )}
                             </div>
                             <div className="center-preview">
@@ -1934,6 +1944,41 @@ export default function HomePage() {
                 <div style={{ fontSize: '0.62rem', opacity: 0.35, marginTop: '0.4rem' }}>Esc or click outside to close</div>
             </div>
         )}
+        {/* ── MASK EDITOR MODAL ── */}
+        {maskEditorJob && maskEditorJob.resultUrl && (() => {
+            // Extract raw base64 from the data URL
+            const [header, b64] = maskEditorJob.resultUrl.split(',');
+            const mimeType = header.replace('data:', '').replace(';base64', '');
+            return (
+                <MaskEditor
+                    imageBase64={b64}
+                    imageMimeType={mimeType}
+                    modelId={maskEditorJob.modelId}
+                    formatLabel={maskEditorJob.formatLabel}
+                    onResult={(base64, mime) => {
+                        const resultUrl = `data:${mime};base64,${base64}`;
+                        const newJob: GenerationJob = {
+                            id: `inpaint-${Date.now()}-${Math.random()}`,
+                            batchId: maskEditorJob.batchId,
+                            status: 'done',
+                            formatId: maskEditorJob.formatId,
+                            formatLabel: maskEditorJob.formatLabel + ' (fixed)',
+                            formatName: (maskEditorJob.formatName ?? maskEditorJob.formatLabel) + ' (fixed)',
+                            modelId: maskEditorJob.modelId,
+                            modelName: maskEditorJob.modelName,
+                            prompt: maskEditorJob.prompt,
+                            resultUrl,
+                            createdAt: Date.now(),
+                            completedAt: Date.now(),
+                        };
+                        setJobs(prev => [newJob, ...prev]);
+                        setActiveStrip(newJob.id);
+                        setMaskEditorJob(null);
+                    }}
+                    onClose={() => setMaskEditorJob(null)}
+                />
+            );
+        })()}
         </div>
     );
 }
