@@ -1697,15 +1697,22 @@ export default function HomePage() {
                                             {enhancedPrompt}
                                         </div>
                                     )}
-                                    {/* Live Effective Prompt Preview */}
-                                    {(useStarterPreset || useNegativeGuard || Object.values(productSpecs).some(Boolean)) && (() => {
+                                    {/* Live Effective Prompt Preview — always shown when specs or presets are active */}
+                                    {(() => {
                                         const base = enhancedPrompt || prompt || '(your prompt here)';
                                         const presetParts = [
                                             useStarterPreset ? PRESET_DS60_STARTER : '',
                                             useNegativeGuard ? PRESET_NEGATIVE_GUARD : '',
                                         ].filter(Boolean);
-                                        const specLines = PRODUCT_SPECS.filter(s => productSpecs[s.key]).map(s => `${s.group}: ${productSpecs[s.key]}`);
-                                        const specBlock = specLines.length ? `\n\nPRODUCT SPECS (follow strictly):\n${specLines.join('\n')}` : '';
+                                        // Use SPEC_EXPANSIONS — the same full text actually sent to Gemini
+                                        const specLines = PRODUCT_SPECS
+                                            .filter(s => productSpecs[s.key])
+                                            .map(s => `• ${s.group}: ${SPEC_EXPANSIONS[productSpecs[s.key]] ?? productSpecs[s.key]}`);
+                                        const specBlock = specLines.length
+                                            ? `\n\n── PRODUCT SPECS (follow strictly) ──\n${specLines.join('\n')}`
+                                            : '';
+                                        const hasContent = presetParts.length > 0 || specLines.length > 0 || prompt.trim();
+                                        if (!hasContent) return null;
                                         const fullPrompt = (presetParts.length ? presetParts.join('\n\n') + '\n\n' : '') + base + specBlock;
                                         return (
                                             <div style={{
@@ -1714,15 +1721,18 @@ export default function HomePage() {
                                                 border: '1px solid rgba(255,255,255,0.08)',
                                                 borderRadius: '4px',
                                                 padding: '0.5rem 0.6rem',
-                                                fontSize: '0.6rem',
+                                                fontSize: '0.58rem',
                                                 lineHeight: 1.6,
                                                 color: 'var(--text-muted)',
-                                                maxHeight: '140px',
+                                                maxHeight: '220px',
                                                 overflowY: 'auto',
                                                 whiteSpace: 'pre-wrap',
                                                 wordBreak: 'break-word',
                                             }}>
-                                                <div style={{ fontSize: '0.55rem', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.3rem' }}>⚡ Effective Prompt Preview</div>
+                                                <div style={{ fontSize: '0.54rem', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>
+                                                    ⚡ Full Prompt Being Sent to Gemini
+                                                    {specLines.length > 0 && <span style={{ marginLeft: 8, color: '#facc15', opacity: 0.8 }}>({specLines.length} spec{specLines.length !== 1 ? 's' : ''} injected)</span>}
+                                                </div>
                                                 {fullPrompt}
                                             </div>
                                         );
