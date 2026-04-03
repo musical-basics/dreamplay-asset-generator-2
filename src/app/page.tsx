@@ -164,7 +164,7 @@ export default function HomePage() {
     // ─── Core state ───────────────────────────────────────────────────────────────
 
     const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set());
-    const [selectedModel, setSelectedModel] = useState<string>('gemini-flash-image');
+    const [selectedModel, setSelectedModel] = useState<string>('gemini-flash-image-31');  // Gemini 3.1 Flash (default)
     const [prompt, setPrompt] = useState('');
     const [enhancedPrompt, setEnhancedPrompt] = useState('');
     const [isEnhancing, setIsEnhancing] = useState(false);
@@ -195,8 +195,23 @@ export default function HomePage() {
         if (ep) setEnhancedPrompt(ep);
         const bs = localStorage.getItem('dp_brand_style');
         if (bs !== null) setUseBrandStyle(bs !== 'off');
+        // Preset toggles
+        const starter = localStorage.getItem('dp_preset_starter');
+        if (starter === 'on') setUseStarterPreset(true);
+        const guard = localStorage.getItem('dp_preset_guard');
+        if (guard === 'on') setUseNegativeGuard(true);
+        // Product specs
+        const specs = localStorage.getItem('dp_product_specs');
+        if (specs) { try { setProductSpecs(JSON.parse(specs)); } catch { /* ignore */ } }
+        // Selected formats
+        const fmts = localStorage.getItem('dp_selected_formats');
+        if (fmts) { try { setSelectedFormats(new Set(JSON.parse(fmts))); } catch { /* ignore */ } }
     }, []);
     useEffect(() => { localStorage.setItem('dp_brand_style', useBrandStyle ? 'on' : 'off'); }, [useBrandStyle]);
+    useEffect(() => { localStorage.setItem('dp_preset_starter', useStarterPreset ? 'on' : 'off'); }, [useStarterPreset]);
+    useEffect(() => { localStorage.setItem('dp_preset_guard', useNegativeGuard ? 'on' : 'off'); }, [useNegativeGuard]);
+    useEffect(() => { localStorage.setItem('dp_product_specs', JSON.stringify(productSpecs)); }, [productSpecs]);
+    useEffect(() => { localStorage.setItem('dp_selected_formats', JSON.stringify(Array.from(selectedFormats))); }, [selectedFormats]);
 
     // Brand suffix — only computed when on
     const brandSuffix = useBrandStyle
