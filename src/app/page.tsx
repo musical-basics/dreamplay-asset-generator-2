@@ -36,47 +36,20 @@ const LABELS: LabelColor[] = ['none', 'red', 'yellow', 'green', 'blue', 'purple'
 // Structured for Gemini image models: positive/spatial/material language first,
 // [CRITICAL] weight markers on hallucination-prone elements, grouped sections.
 const PRESET_DS60_STARTER =
-`[SUBJECT] DreamPlay DS 6.0 — 88-key digital piano. Luxury product photography, photorealistic, 8K detail.
-
-[KEYBOARD — CRITICAL]
-Exact 88-key layout. Black keys arranged in strict 2-key group / gap / 3-key group / gap repeating pattern across the full width. White keys are regular, uniform, evenly spaced. Reproduce the exact key count and grouping from the reference image.
-
-[CONTROL PANEL — follow reference exactly]
-- Top-left: two identical round flat-top knobs (Sound + Volume), matte black rubber, same size, same gap between them
-- Center: rectangular LCD display screen, exact size and position from reference, no added text or graphics
-- Center: large circular dial, patterned rubber surface (alternating black/white sections), gold metallic outer ring
-- Right of LCD: exactly six rectangular rubber buttons in a row, matching reference shapes and spacing; one gold metallic accent button
-
-[LOGO — CRITICAL]
-DreamPlay wordmark logo, exact letterforms from reference. White logo on dark backgrounds. Black logo on light backgrounds. Centered below control panel. Do not alter, distort, or invent characters.
-
-[SPEAKER GRILLS — follow reference exactly]
-Left and right sides of the chassis: clean, evenly-spaced horizontal line grooves (not dots, not mesh, not organic). Both sides identical. Matte black housing.
-
-[LIGHTING & PHOTOGRAPHY]
-Cinematic studio lighting, soft key light from upper-left, subtle fill, controlled specular highlights on surfaces. Dark gradient or solid dark background. Shallow depth of field, subject in crisp focus.
-
-[MATERIALS]
-Chassis: matte black ABS. White keys: gloss ivory. Black keys: matte black. Logo: metallic or printed. Knobs: flat-top matte rubber. Dial outer ring: gold polished metal. Buttons: satin rubber with one gold metallic.`;
+`DreamPlay DS 6.0 — 88-key digital piano. Luxury product photography, photorealistic rendering.
+Lighting: cinematic studio — soft key light upper-left, subtle fill, controlled specular. Shallow depth of field, subject sharp.
+Materials: matte black ABS chassis · gloss ivory white keys · matte black black-keys · flat-top matte rubber knobs · gold polished metal dial ring · satin rubber buttons (one gold accent) · metallic printed logo.`;
 
 const PRESET_NEGATIVE_GUARD =
-`[ACCURACY CONSTRAINTS — apply to every element]
-
-[KEYBOARD] The black keys MUST follow the 2-gap-3-gap repeating grouping. A piano where all black keys are evenly spaced across the keyboard is WRONG. Reference the uploaded image for exact layout.
-
-[LOGO] Reproduce the DreamPlay logo exactly. Do not invent new letter shapes, do not add taglines, do not resize or reposition, do not substitute a different wordmark.
-
-[KNOBS] The two top-left knobs are identical — same diameter, same height, same material, same gap. Do not add more knobs, do not change their shape to domed or spike-style.
-
-[LCD] The LCD display maintains its exact rectangular dimensions and position. Do not add new labels, do not show user interface graphics, do not resize.
-
-[CENTER DIAL] The large dial has a patterned rubber face (alternating black/white arc segments) with a gold metallic outer ring. Do not simplify to a plain circle. Do not change materials.
-
-[6 BUTTONS] The six rectangular rubber buttons stay in their exact configuration and shapes. Do not add or remove buttons. One is gold metallic — the rest match the housing color.
-
-[SPEAKER GRILLS] Both speaker grills are parallel horizontal grooves — not hexagonal mesh, not circular perforations, not organic texture. Keep them symmetrical and identical left-to-right.
-
-[GEOMETRY] Do not warp, stretch, foreshorten, or distort the keyboard body. Maintain true proportions matching the reference image.`;
+`STOP — do not render any of the following:
+✗ Evenly-spaced black keys (wrong — must be 2-gap-3-gap groups)
+✗ More than 3 consecutive black keys in one cluster
+✗ Invented logo letterforms, added taglines, or filled-in "Play" lettering (it must be outline stroke)
+✗ Extra or missing knobs (exactly 2, identical, flat-top rubber)
+✗ Plain silver/chrome center dial (it has alternating rubber segments + gold ring)
+✗ Extra buttons or missing the 1 gold accent button
+✗ Hexagonal mesh, dots, or perforations for speaker grills (straight horizontal grooves only)
+✗ Warped or stretched keyboard body proportions`;
 
 
 const FLAG_ICONS: Record<FlagState, string> = {
@@ -178,7 +151,7 @@ export default function HomePage() {
 
     // ── Prompt preset toggles ───────────────────────────────────
     const [useStarterPreset, setUseStarterPreset] = useState(false);
-    const [useNegativeGuard, setUseNegativeGuard] = useState(false);
+    const [useNegativeGuard, setUseNegativeGuard] = useState(true);  // on by default — key anti-hallucination guard
 
     // ── Product spec configurator ───────────────────────────────
     const [productSpecs, setProductSpecs] = useState<Record<string, string>>({
@@ -205,26 +178,28 @@ export default function HomePage() {
 
     // Expand ambiguous labels into precise prompt directives for Gemini
     const SPEC_EXPANSIONS: Record<string, string> = {
-        'Retain from ref': 'CRITICAL — retain the EXACT same camera angle and perspective as shown in the reference image. Do not change the viewpoint, tilt, or framing in any way. Match the reference shot precisely.',
-        '3/4 view': 'Three-quarter angle — camera at 45° to the front-left of the product, showing the full front face and left side panel simultaneously (standard hero product shot)',
-        'Side profile': 'Pure side profile — camera perfectly perpendicular to the left side, only the side panel visible',
-        'Top down': 'Flat lay / top-down — camera directly overhead looking straight down at the product',
-        'Front': 'Straight-on front view — camera centered directly in front, perfectly symmetrical, front face only',
-        'Back': 'Rear view — camera directly behind showing the back panel only',
-        'Close up': 'Tight close-up — frame only a specific detail or section, high magnification',
-        'Full product': 'Full product shot — the entire instrument fits within the frame with breathing room',
-        'Wide': 'Wide shot — product occupies ~55% of frame, environment and background visible',
-        'Far': 'Distant / environmental — product is small in frame, wide environment dominates',
-        // Background styles
-        'Drop shadow': 'Clean studio background with a soft, natural drop shadow directly beneath and behind the product — minimalist, crisp, white or dark seamless backdrop',
-        'Reflective': 'Glossy reflective surface below the product — the piano reflects perfectly on a polished floor or table surface, creating a symmetrical mirror-like reflection beneath it',
-        'High-end product lighting pop': 'Dynamic studio lighting with volumetric light rays, dramatic backlight rim glow, and cinematic atmosphere — think Apple or Bang & Olufsen launch campaign photography',
+        // Camera
+        'Retain from ref': 'match camera angle and perspective exactly from reference — do not change viewpoint',
+        '3/4 view': '3/4 angle — 45° front-left, shows full front face and left side panel',
+        'Side profile': 'pure side view — camera perpendicular to left side only',
+        'Top down': 'top-down flat lay — camera directly overhead',
+        'Front': 'straight-on front — camera centered, perfectly symmetrical',
+        'Back': 'rear view — back panel only',
+        // Crop
+        'Close up': 'tight close-up — high magnification on a specific detail',
+        'Full product': 'full product in frame with breathing room',
+        'Wide': 'wide shot — product at ~55% of frame, environment visible',
+        'Far': 'environmental shot — product small in frame, wide scene dominates',
+        // Background
+        'Drop shadow': 'studio backdrop with soft natural drop shadow below product, clean seamless surface',
+        'Reflective': 'polished reflective floor — piano reflects symmetrically below',
+        'High-end product lighting pop': 'dramatic studio: volumetric light rays, rim glow, cinematic atmosphere',
     };
     const buildSpecSuffix = () => {
         const lines = PRODUCT_SPECS
             .filter(s => productSpecs[s.key])
             .map(s => `${s.group}: ${SPEC_EXPANSIONS[productSpecs[s.key]] ?? productSpecs[s.key]}`);
-        return lines.length ? `\n\nPRODUCT SPECS (follow strictly):\n${lines.join('\n')}` : '';
+        return lines.length ? `\n\n[SPECS — follow strictly]\n${lines.join('\n')}` : '';
     };
 
     // Hydrate from localStorage after first mount (avoids SSR hydration mismatch)
