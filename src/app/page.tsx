@@ -109,15 +109,29 @@ export default function HomePage() {
     // ─── Core state ───────────────────────────────────────────────────────────────
 
     const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set());
-    const [selectedModel, setSelectedModel] = useState<string>(() => typeof window !== 'undefined' ? (localStorage.getItem('dp_model') || 'gemini-flash-image') : 'gemini-flash-image');
-    const [prompt, setPrompt] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('dp_prompt') || '') : '');
-    const [enhancedPrompt, setEnhancedPrompt] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('dp_enhanced_prompt') || '') : '');
+    const [selectedModel, setSelectedModel] = useState<string>('gemini-flash-image');
+    const [prompt, setPrompt] = useState('');
+    const [enhancedPrompt, setEnhancedPrompt] = useState('');
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [brandTags, setBrandTags] = useState<string[]>(DEFAULT_BRAND_CONFIG.styleWords);
     const [activeBrandTags, setActiveBrandTags] = useState<Set<string>>(new Set(DEFAULT_BRAND_CONFIG.styleWords));
-    const [useBrandStyle, setUseBrandStyle] = useState<boolean>(() =>
-        typeof window !== 'undefined' ? localStorage.getItem('dp_brand_style') !== 'off' : true
-    );
+    const [useBrandStyle, setUseBrandStyle] = useState<boolean>(true);
+
+    // ── Prompt preset toggles ───────────────────────────────────
+    const [useStarterPreset, setUseStarterPreset] = useState(false);
+    const [useNegativeGuard, setUseNegativeGuard] = useState(false);
+
+    // Hydrate from localStorage after first mount (avoids SSR hydration mismatch)
+    useEffect(() => {
+        const m = localStorage.getItem('dp_model');
+        if (m) setSelectedModel(m);
+        const p = localStorage.getItem('dp_prompt');
+        if (p) setPrompt(p);
+        const ep = localStorage.getItem('dp_enhanced_prompt');
+        if (ep) setEnhancedPrompt(ep);
+        const bs = localStorage.getItem('dp_brand_style');
+        if (bs !== null) setUseBrandStyle(bs !== 'off');
+    }, []);
     useEffect(() => { localStorage.setItem('dp_brand_style', useBrandStyle ? 'on' : 'off'); }, [useBrandStyle]);
 
     // Brand suffix — only computed when on
@@ -589,7 +603,12 @@ export default function HomePage() {
             prompt: enhancedPrompt || prompt, createdAt: Date.now(),
         }));
         setJobs(prev => [...newJobs, ...prev]);
-        const activePrompt = enhancedPrompt || prompt;
+        const basePrompt = enhancedPrompt || prompt;
+        const presetPrefix = [
+            useStarterPreset ? PRESET_DS60_STARTER : '',
+            useNegativeGuard ? PRESET_NEGATIVE_GUARD : '',
+        ].filter(Boolean).join('\n\n');
+        const activePrompt = presetPrefix ? `${presetPrefix}\n\n${basePrompt}` : basePrompt;
         const refImagePaths = selectedRefPaths.slice();
 
         // ── Save to history ──────────────────────────────────────────────────────
@@ -1350,10 +1369,18 @@ export default function HomePage() {
                                     {/* ── Prompt Presets ── */}
                                     <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
                                         <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '0.15rem' }}>Presets:</span>
-                                        <button className="brand-tag" title="Insert DS 6.0 starter prompt"
-                                            onClick={() => setPrompt(p => (p.trim() ? p.trim() + '\n\n' : '') + PRESET_DS60_STARTER)}>⚡ DS 6.0 Starter</button>
-                                        <button className="brand-tag" title="Append negative constraints to stop hallucinations"
-                                            onClick={() => setPrompt(p => (p.trim() ? p.trim() + '\n\n' : '') + PRESET_NEGATIVE_GUARD)}>🚫 Negative Guard</button>
+                                        <button
+                                            className={`brand-tag${useStarterPreset ? ' active' : ''}`}
+                                            title="Toggle DS 6.0 generation starter — auto-prepended to every generation"
+                                            onClick={() => setUseStarterPreset(v => !v)}>
+                                            ⚡ DS 6.0 Starter
+                                        </button>
+                                        <button
+                                            className={`brand-tag${useNegativeGuard ? ' active' : ''}`}
+                                            title="Toggle negative constraints — stops hallucinations of all DS 6.0 elements"
+                                            onClick={() => setUseNegativeGuard(v => !v)}>
+                                            🚫 Negative Guard
+                                        </button>
                                         <button className="brand-tag" style={{ opacity: 0.5 }} title="Clear prompt"
                                             onClick={() => setPrompt('')}>✕ Clear</button>
                                     </div>
