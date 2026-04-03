@@ -247,9 +247,33 @@ select {
 /* ── 3-PANEL ROW ── */
 .panels-row {
   grid-row: 2;
-  display: grid;
-  grid-template-columns: var(--left-w) 1fr var(--right-w);
+  display: flex;
   overflow: hidden;
+}
+
+/* Drag handles between panels */
+.panel-resizer {
+  width: 4px;
+  min-width: 4px;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+.panel-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 1px; width: 2px;
+  background: transparent;
+  transition: background 0.12s;
+}
+.panel-resizer:hover::after,
+.panel-resizer.dragging::after {
+  background: var(--accent);
+  opacity: 0.5;
 }
 
 /* ── LEFT PANEL — Finder/LR Albums style ── */

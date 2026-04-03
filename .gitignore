@@ -33,3 +33,6 @@ repomix-output*.txt
 
 # IDE
 .vscode/
+
+# SQLite catalog DB (local only)
+.catalog/

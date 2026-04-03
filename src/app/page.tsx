@@ -101,6 +101,8 @@ export default function HomePage() {
         setPrompt(localStorage.getItem('dp_prompt') || '');
         setEnhancedPrompt(localStorage.getItem('dp_enhanced_prompt') || '');
         setUseBrandStyle(localStorage.getItem('dp_brand_style') !== 'off');
+        setLeftW(Number(localStorage.getItem('dp_left_w')) || 220);
+        setRightW(Number(localStorage.getItem('dp_right_w')) || 270);
         try {
             const storedJobs = JSON.parse(sessionStorage.getItem('dp_jobs') || '[]');
             if (storedJobs.length) setJobs(storedJobs);
@@ -108,6 +110,55 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     useEffect(() => { localStorage.setItem('dp_brand_style', useBrandStyle ? 'on' : 'off'); }, [useBrandStyle]);
+
+    // ─── Panel resize state ─────────────────────────────────────────────────
+    const [leftW, setLeftW] = useState(220);
+    const [rightW, setRightW] = useState(270);
+    const dragRef = useRef<{ which: 'left' | 'right'; startX: number; startW: number } | null>(null);
+    const startPanelDrag = useCallback((which: 'left' | 'right', e: React.MouseEvent) => {
+        e.preventDefault();
+        const handle = e.currentTarget as HTMLElement;
+        handle.classList.add('dragging');
+        dragRef.current = { which, startX: e.clientX, startW: which === 'left' ? leftW : rightW };
+        const onMove = (ev: MouseEvent) => {
+            if (!dragRef.current) return;
+            const delta = ev.clientX - dragRef.current.startX;
+            if (dragRef.current.which === 'left') {
+                setLeftW(Math.max(140, Math.min(450, dragRef.current.startW + delta)));
+            } else {
+                setRightW(Math.max(180, Math.min(450, dragRef.current.startW - delta)));
+            }
+        };
+        const onUp = () => {
+            handle.classList.remove('dragging');
+            if (dragRef.current) {
+                localStorage.setItem('dp_left_w', String(leftW));
+                localStorage.setItem('dp_right_w', String(rightW));
+            }
+            dragRef.current = null;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    }, [leftW, rightW]);
+
+    // ─── Index Library state ───────────────────────────────────────────────
+    const [indexing, setIndexing] = useState(false);
+    const [indexMsg, setIndexMsg] = useState('');
+    const runIndexLibrary = async () => {
+        setIndexing(true); setIndexMsg('');
+        try {
+            const res = await fetch('/api/index-library', { method: 'POST' });
+            const d = await res.json();
+            setIndexMsg(d.ok ? `✓ Indexed ${d.indexed} files (${d.skipped} up to date)` : `Error: ${d.error}`);
+            // Refresh library after indexing
+            const lib = await fetch('/api/product-images').then(r => r.json());
+            if (lib.grouped) setProductLibrary(lib.grouped);
+        } catch (e) { setIndexMsg(String(e)); }
+        setIndexing(false);
+        setTimeout(() => setIndexMsg(''), 5000);
+    };
 
     // Brand suffix — only computed when on
     const brandSuffix = useBrandStyle
@@ -715,8 +766,22 @@ export default function HomePage() {
             <div className="panels-row">
 
                 {/* LEFT PANEL */}
-                <aside className="left-panel">
-                    <div className="left-panel-header">Library</div>
+                <aside className="left-panel" style={{ width: leftW, minWidth: leftW, maxWidth: leftW, flexShrink: 0 }}>
+                    <div className="left-panel-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>Library</span>
+                        <button
+                            onClick={runIndexLibrary}
+                            disabled={indexing}
+                            title="Re-index all product images into SQLite catalog"
+                            style={{ fontSize: '0.54rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: 4,
+                                background: indexing ? 'rgba(255,255,255,0.06)' : 'rgba(201,168,76,0.15)',
+                                border: '1px solid rgba(201,168,76,0.3)', color: 'var(--gold)',
+                                cursor: indexing ? 'default' : 'pointer', letterSpacing: '0.04em' }}
+                        >
+                            {indexing ? '⏳' : '⚡ Index'}
+                        </button>
+                    </div>
+                    {indexMsg && <div style={{ fontSize: '0.6rem', color: 'var(--accent-green)', padding: '0.25rem 0.75rem', background: 'rgba(48,209,88,0.08)', borderBottom: '1px solid rgba(48,209,88,0.15)' }}>{indexMsg}</div>}
                     <div className="folder-tree">
                         {isLoadingLibrary ? (
                             <div style={{ padding: '1rem 0.75rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Loading…</div>
@@ -939,8 +1004,11 @@ export default function HomePage() {
                     })()}
                 </aside>
 
+                {/* LEFT–CENTER RESIZER */}
+                <div className="panel-resizer" onMouseDown={e => startPanelDrag('left', e)} />
+
                 {/* CENTER PANEL */}
-                <main className="center-panel">
+                <main className="center-panel" style={{ flex: 1, minWidth: 0 }}>
                     {currentPreviewJob ? (
                         /* Generated result preview */
                         <>
@@ -1179,7 +1247,10 @@ export default function HomePage() {
                 </main>
 
                 {/* RIGHT PANEL */}
-                <aside className="right-panel">
+                {/* CENTER–RIGHT RESIZER */}
+                <div className="panel-resizer" onMouseDown={e => startPanelDrag('right', e)} />
+
+                <aside className="right-panel" style={{ width: rightW, minWidth: rightW, maxWidth: rightW, flexShrink: 0 }}>
                     <div className="right-panel-scroll">
 
                         {/* Model */}
