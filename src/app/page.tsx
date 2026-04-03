@@ -1102,7 +1102,13 @@ export default function HomePage() {
                                     const role = refTags.get(path);
                                     return (
                                         <div key={path} style={{ aspectRatio: '1', borderRadius: '3px', overflow: 'hidden', position: 'relative', border: '1px solid rgba(10,132,255,0.5)', cursor: 'pointer' }}>
-                                            <img src={thumbUrl(path, 200)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" onClick={() => toggleRefSelection(path)} />
+                                            {isVideoFile(path) ? (
+                                                <video src={path} muted playsInline preload="metadata"
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    onClick={() => toggleRefSelection(path)} />
+                                            ) : (
+                                                <img src={thumbUrl(path, 200)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" onClick={() => toggleRefSelection(path)} />
+                                            )}
                                             {/* role badge */}
                                             <button onClick={e => { e.stopPropagation(); cycleRefTag(path); }}
                                                 style={{ position: 'absolute', bottom: 1, left: 1, border: 'none', borderRadius: 2, padding: '1px 3px', fontSize: '0.44rem', fontWeight: 700, cursor: 'pointer', lineHeight: 1.2, background: role ? REF_ROLE_COLORS[role] : 'rgba(0,0,0,0.55)', color: '#fff' }}>
@@ -1894,20 +1900,36 @@ export default function HomePage() {
                     </button>
                     <a href={lightboxSrc} download className="btn btn-ghost btn-sm">↓ Download</a>
                 </div>
-                {/* Image */}
-                <img
-                    src={lightboxSrc}
-                    alt="Preview"
-                    style={{
-                        maxWidth: 'calc(100vw - 48px)',
-                        maxHeight: 'calc(100vh - 100px)',
-                        objectFit: 'contain',
-                        borderRadius: '4px',
-                        boxShadow: '0 8px 64px rgba(0,0,0,0.8)',
-                        marginTop: '52px',
-                    }}
-                    onClick={e => e.stopPropagation()}
-                />
+                {/* Image / Video */}
+                {isVideoFile(lightboxSrc) ? (
+                    <video
+                        src={lightboxSrc}
+                        controls
+                        autoPlay
+                        style={{
+                            maxWidth: 'calc(100vw - 48px)',
+                            maxHeight: 'calc(100vh - 100px)',
+                            borderRadius: '4px',
+                            boxShadow: '0 8px 64px rgba(0,0,0,0.8)',
+                            marginTop: '52px',
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    />
+                ) : (
+                    <img
+                        src={lightboxSrc}
+                        alt="Preview"
+                        style={{
+                            maxWidth: 'calc(100vw - 48px)',
+                            maxHeight: 'calc(100vh - 100px)',
+                            objectFit: 'contain',
+                            borderRadius: '4px',
+                            boxShadow: '0 8px 64px rgba(0,0,0,0.8)',
+                            marginTop: '52px',
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    />
+                )}
                 <div style={{ fontSize: '0.62rem', opacity: 0.35, marginTop: '0.4rem' }}>Esc or click outside to close</div>
             </div>
         )}
