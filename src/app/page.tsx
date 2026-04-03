@@ -329,11 +329,16 @@ export default function HomePage() {
             };
             setJobs(prev => [newJob, ...prev]);
             try {
-                const res = await fetch('/api/generate-image', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: newJob.prompt, modelId: newJob.modelId,
-                        aspectRatio: fmt.aspectRatio, refImagePaths: selectedRefPaths, brandSuffix: brandSuffix ?? undefined }),
-                });
+                let res: Response;
+                try {
+                    res = await fetch('/api/generate-image', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: newJob.prompt, modelId: newJob.modelId,
+                            aspectRatio: fmt.aspectRatio, refImagePaths: selectedRefPaths, brandSuffix: brandSuffix ?? undefined }),
+                    });
+                } catch {
+                    throw new Error('Server unreachable — make sure the dev server is running on port 3000');
+                }
                 const data = await res.json();
                 const resultUrl = data.base64 ? `data:${data.mimeType || 'image/png'};base64,${data.base64}` : undefined;
                 if (resultUrl) {
@@ -344,7 +349,7 @@ export default function HomePage() {
                     setJobs(prev => prev.map(j => j.id === newJobId ? { ...j, status: 'error', error: data.error || 'Failed' } : j));
                 }
             } catch (err) {
-                setJobs(prev => prev.map(j => j.id === newJobId ? { ...j, status: 'error', error: String(err) } : j));
+                setJobs(prev => prev.map(j => j.id === newJobId ? { ...j, status: 'error', error: err instanceof Error ? err.message : String(err) } : j));
             }
         }
         setPosSubmitting(false);
@@ -397,15 +402,20 @@ export default function HomePage() {
                 };
                 setJobs(prev => [newJob, ...prev]);
                 try {
-                    const res = await fetch('/api/generate-image', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            prompt: newJob.prompt, modelId: newJob.modelId,
-                            aspectRatio: fmt.aspectRatio,
-                            refImagePaths: selectedRefPaths,
-                            brandSuffix: brandSuffix ?? undefined,
-                        }),
-                    });
+                    let res: Response;
+                    try {
+                        res = await fetch('/api/generate-image', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                prompt: newJob.prompt, modelId: newJob.modelId,
+                                aspectRatio: fmt.aspectRatio,
+                                refImagePaths: selectedRefPaths,
+                                brandSuffix: brandSuffix ?? undefined,
+                            }),
+                        });
+                    } catch {
+                        throw new Error('Server unreachable — make sure the dev server is running on port 3000');
+                    }
                     const data = await res.json();
                     if (data.base64) {
                         const resultUrl = `data:${data.mimeType || 'image/png'};base64,${data.base64}`;
@@ -417,7 +427,7 @@ export default function HomePage() {
                     }
                 } catch (err) {
                     setJobs(prev => prev.map(j => j.id === newJobId
-                        ? { ...j, status: 'error', error: String(err) } : j));
+                        ? { ...j, status: 'error', error: err instanceof Error ? err.message : String(err) } : j));
                 }
             }
         }
@@ -853,10 +863,15 @@ export default function HomePage() {
             const fmt = OUTPUT_FORMATS.find(f => f.id === job.formatId)!;
             setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'processing' } : j));
             try {
-                const res = await fetch(fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, width: fmt.width, height: fmt.height, refImagePaths, brandSuffix, prioritySuffix }),
-                });
+                let res: Response;
+                try {
+                    res = await fetch(fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, width: fmt.width, height: fmt.height, refImagePaths, brandSuffix, prioritySuffix }),
+                    });
+                } catch {
+                    throw new Error('Server unreachable — make sure the dev server is running on port 3000');
+                }
                 const data = await res.json();
                 const resultUrl = data.base64 ? `data:${data.mimeType || 'image/png'};base64,${data.base64}` : data.videoUrl || undefined;
                 if (resultUrl || data.operationName) {
@@ -864,7 +879,7 @@ export default function HomePage() {
                     if (data.base64) saveGenerationToDisk(job, data.base64, data.mimeType || 'image/png', refImagePaths, brandSuffix);
                 } else { throw new Error(data.error || 'No result'); }
             } catch (err) {
-                setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'error', error: String(err) } : j));
+                setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'error', error: err instanceof Error ? err.message : String(err) } : j));
             }
         }
         setIsGenerating(false);
@@ -878,7 +893,7 @@ export default function HomePage() {
         setSelectedModel(entry.modelId);
     };
 
-    const reGenerateFromHistory = useCallback(async (entry: HistoryEntry) => {
+    const reGenerateFromHistory = async (entry: HistoryEntry) => {
         // Restore state
         setPrompt(entry.prompt);
         setEnhancedPrompt(entry.enhancedPrompt);
@@ -886,7 +901,9 @@ export default function HomePage() {
         setSelectedModel(entry.modelId);
         // Then trigger generation with the entry's data directly
         const formats = OUTPUT_FORMATS.filter(f => entry.formatLabels.includes(f.label));
-        const model = MODEL_OPTIONS.find(m => m.id === entry.modelId);
+        // Match by id OR apiModel (for backward compat with older history entries)
+        const model = MODEL_OPTIONS.find(m => m.id === entry.modelId || m.apiModel === entry.modelId)
+            ?? MODEL_OPTIONS.find(m => m.id === 'gemini-flash-image'); // safe fallback
         if (!formats.length || !model) return;
         setIsGenerating(true); setActiveStrip(null);
         const activePrompt = entry.enhancedPrompt || entry.prompt;
@@ -901,21 +918,26 @@ export default function HomePage() {
             const fmt = OUTPUT_FORMATS.find(f => f.id === job.formatId)!;
             setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'processing' } : j));
             try {
-                const res = await fetch(fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, refImagePaths: entry.refPaths, brandSuffix, prioritySuffix }),
-                });
+                let res: Response;
+                try {
+                    res = await fetch(fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, refImagePaths: entry.refPaths, brandSuffix, prioritySuffix }),
+                    });
+                } catch {
+                    throw new Error('Server unreachable — make sure the dev server is running on port 3000');
+                }
                 const data = await res.json();
                 const resultUrl = data.base64 ? `data:${data.mimeType || 'image/png'};base64,${data.base64}` : data.videoUrl || undefined;
                 if (resultUrl || data.operationName) {
                     setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'done', resultUrl, completedAt: Date.now() } : j));
                 } else { throw new Error(data.error || 'No result'); }
             } catch (err) {
-                setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'error', error: String(err) } : j));
+                setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'error', error: err instanceof Error ? err.message : String(err) } : j));
             }
         }
         setIsGenerating(false);
-    }, []);
+    };
 
     const saveHistoryEdit = (id: string, newPrompt: string) => {
         setGenHistory(prev => {
