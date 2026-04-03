@@ -97,6 +97,12 @@ function fmtDuration(s: number) {
 
 // ─── Feedback ──────────────────────────────────────────────────────────────────
 const FEEDBACK_ISSUES = ['Wrong keyboard layout', 'Wrong key count', 'Logo missing/wrong', 'Wrong color/finish', 'Geometry issues', 'Hallucinated elements', 'Poor quality', 'Other'];
+const POSITIVE_QUALITIES = [
+    'Moody lighting', 'Studio lighting', 'Dark reflections', 'Warm glow / golden hour',
+    'Premium feel', 'Clean product lines', 'Accurate keyboard', 'Logo looks great',
+    'Color palette', 'Background / environment', 'Camera angle', 'Dramatic shadows',
+    'Material textures', 'Water / surface reflections', 'Cinematic depth of field', 'Other',
+];
 
 // ─── Thumbnail helper ─────────────────────────────────────────────────────────
 // Routes product images through /api/thumb which caches resized WebP permanently.
@@ -156,6 +162,81 @@ export default function HomePage() {
     const openFeedback = (job: GenerationJob, e: React.MouseEvent) => { e.stopPropagation(); setFbJob(job); setFbIssues([]); setFbNote(''); };
     const closeFeedback = () => setFbJob(null);
     const toggleIssue = (issue: string) => setFbIssues(prev => prev.includes(issue) ? prev.filter(i => i !== issue) : [...prev, issue]);
+
+    // ── Positive feedback loop ───────────────────────────────────────
+    const [posJob, setPosJob] = useState<GenerationJob | null>(null);
+    const [posQualities, setPosQualities] = useState<string[]>([]);
+    const [posNote, setPosNote] = useState('');
+    const [posSubmitting, setPosSubmitting] = useState(false);
+    const openPositiveFeedback = (job: GenerationJob, e: React.MouseEvent) => {
+        e.stopPropagation();
+        rateJob(job.id, 'good');
+        fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobId: job.id, modelId: job.modelId, prompt: job.prompt, formatLabel: job.formatLabel, issues: [], rating: 'good' }) }).catch(() => {});
+        setPosJob(job); setPosQualities([]); setPosNote('');
+    };
+    const closePosModal = () => setPosJob(null);
+    const toggleQuality = (q: string) => setPosQualities(prev => prev.includes(q) ? prev.filter(x => x !== q) : [...prev, q]);
+
+    const submitPositiveFeedback = async () => {
+        if (!posJob) return;
+        setPosSubmitting(true);
+        // Log positive feedback with selected qualities
+        await fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobId: posJob.id, modelId: posJob.modelId, prompt: posJob.prompt,
+                formatLabel: posJob.formatLabel, qualities: posQualities, note: posNote, rating: 'good' }) }).catch(() => {});
+
+        // Build amplification suffix from selected qualities
+        const amplifications: string[] = [];
+        if (posQualities.some(q => q.includes('light'))) amplifications.push('AMPLIFY: Push the lighting further — more dramatic, cinematic, mood-enhancing.');
+        if (posQualities.includes('Dark reflections') || posQualities.includes('Water / surface reflections')) amplifications.push('AMPLIFY: Enhance surface reflections and glossy material interplay.');
+        if (posQualities.includes('Premium feel')) amplifications.push('AMPLIFY: Push the luxury and premium aesthetic to the maximum — tactile materials, refined details.');
+        if (posQualities.includes('Clean product lines')) amplifications.push('KEEP: Maintain the sharp, clean product geometry exactly as rendered.');
+        if (posQualities.includes('Color palette')) amplifications.push('AMPLIFY: Deepen and saturate the color palette while maintaining brand accuracy.');
+        if (posQualities.includes('Background / environment')) amplifications.push('AMPLIFY: Enhance the background environment with more depth and atmosphere.');
+        if (posQualities.includes('Camera angle')) amplifications.push('KEEP: Maintain the same camera angle and perspective.');
+        if (posQualities.includes('Dramatic shadows')) amplifications.push('AMPLIFY: Deepen the shadow contrast for even more dramatic impact.');
+        if (posQualities.includes('Material textures')) amplifications.push('AMPLIFY: Enhance material surface detail — grain, gloss, matte transitions.');
+        if (posQualities.includes('Cinematic depth of field')) amplifications.push('AMPLIFY: Increase bokeh and depth separation while keeping the subject tack sharp.');
+        if (posNote) amplifications.push(`User direction: ${posNote}`);
+
+        const suffix = amplifications.length
+            ? `\n\n[POSITIVE ITERATION — Build on the previous success: ${amplifications.join(' ')}]`
+            : `\n\n[POSITIVE ITERATION — Generate a refined variation that improves on all aspects of the previous result.]`;
+
+        const fmt = OUTPUT_FORMATS.find(f => f.label === posJob.formatLabel);
+        if (fmt) {
+            const newJobId = `${Date.now()}-${Math.random()}`;
+            const newJob: GenerationJob = {
+                id: newJobId, batchId: `b-${Date.now()}`,
+                formatId: fmt.id, formatLabel: fmt.label,
+                modelId: posJob.modelId, modelName: posJob.modelName,
+                status: 'processing', prompt: posJob.prompt + suffix,
+                createdAt: Date.now(),
+            };
+            setJobs(prev => [newJob, ...prev]);
+            try {
+                const res = await fetch('/api/generate-image', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: newJob.prompt, modelId: newJob.modelId,
+                        aspectRatio: fmt.aspectRatio, refImagePaths: selectedRefPaths, brandSuffix: brandSuffix ?? undefined }),
+                });
+                const data = await res.json();
+                const resultUrl = data.base64 ? `data:${data.mimeType || 'image/png'};base64,${data.base64}` : undefined;
+                if (resultUrl) {
+                    setJobs(prev => prev.map(j => j.id === newJobId ? { ...j, status: 'done', resultUrl } : j));
+                    setActiveStrip(newJobId);
+                    saveGenerationToDisk(newJob, data.base64, data.mimeType || 'image/png', selectedRefPaths, brandSuffix);
+                } else {
+                    setJobs(prev => prev.map(j => j.id === newJobId ? { ...j, status: 'error', error: data.error || 'Failed' } : j));
+                }
+            } catch (err) {
+                setJobs(prev => prev.map(j => j.id === newJobId ? { ...j, status: 'error', error: String(err) } : j));
+            }
+        }
+        setPosSubmitting(false);
+        closePosModal();
+    };
     const rateJob = (jobId: string, rating: 'good' | 'bad') =>
         setJobs(prev => prev.map(j => j.id === jobId ? { ...j, feedback: rating } : j));
 
@@ -1465,8 +1546,8 @@ export default function HomePage() {
                                         {job.status === 'done' && (
                                             <div className="strip-feedback">
                                                 <button className={`strip-fb-btn good${job.feedback === 'good' ? ' active' : ''}`}
-                                                    onClick={e => { e.stopPropagation(); rateJob(job.id, 'good'); fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: job.id, modelId: job.modelId, prompt: job.prompt, formatLabel: job.formatLabel, issues: [], rating: 'good' }) }); }}
-                                                    title="Good generation">👍</button>
+                                                    onClick={e => openPositiveFeedback(job, e)}
+                                                    title="Loved it — generate more like this">👍</button>
                                                 <button className={`strip-fb-btn bad${job.feedback === 'bad' ? ' active' : ''}`}
                                                     onClick={e => openFeedback(job, e)}
                                                     title="Flag issues">👎</button>
@@ -1507,6 +1588,36 @@ export default function HomePage() {
                             </button>
                             <button className="btn btn-gold btn-sm" onClick={() => submitFeedback(true)} disabled={fbSubmitting}>
                                 {fbSubmitting ? 'Generating…' : '⚡ Fix & Re-generate'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* ── POSITIVE FEEDBACK MODAL ── */}
+            {posJob && (
+                <div className="fb-overlay" onClick={closePosModal}>
+                    <div className="fb-modal" onClick={e => e.stopPropagation()}>
+                        <div className="fb-modal-title" style={{ color: '#4ade80' }}>🌟 What made this great?</div>
+                        <div className="fb-modal-sub">
+                            {posJob.formatLabel} · {posJob.modelName}<br />
+                            Prompt: <em>{(posJob.prompt || '').slice(0, 80)}{(posJob.prompt || '').length > 80 ? '…' : ''}</em>
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Select everything you loved — the next generation will amplify these qualities:</div>
+                        <div className="fb-chips">
+                            {POSITIVE_QUALITIES.map(q => (
+                                <button key={q}
+                                    className={`fb-chip${posQualities.includes(q) ? ' selected' : ''}`}
+                                    onClick={() => toggleQuality(q)}>
+                                    {q}
+                                </button>
+                            ))}
+                        </div>
+                        <textarea className="fb-note" placeholder="Anything else you want to amplify or keep? (optional)"
+                            value={posNote} onChange={e => setPosNote(e.target.value)} />
+                        <div className="fb-actions">
+                            <button className="btn btn-ghost btn-sm" onClick={closePosModal} disabled={posSubmitting}>Cancel</button>
+                            <button className="btn btn-gold btn-sm" onClick={submitPositiveFeedback} disabled={posSubmitting}>
+                                {posSubmitting ? <><span className="spinner" /> Generating…</> : '⚡ Generate More Like This'}
                             </button>
                         </div>
                     </div>
