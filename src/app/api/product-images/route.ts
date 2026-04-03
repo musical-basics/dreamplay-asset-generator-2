@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { queryGrouped, getCount, upsertImage, deleteImage } from '@/lib/catalog';
+import { queryGrouped, getCount, upsertImage, deleteImage, getMtime } from '@/lib/catalog';
 
 // ── Fallback: seed SQLite from disk if DB is empty ─────────────────────────
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.JPG', '.JPEG', '.PNG', '.WEBP']);
@@ -32,15 +32,18 @@ function autoSeed() {
   for (const f of walkDir(publicDir, publicDir)) {
     try {
       const stat = fs.statSync(f.absPath);
+      const mtime = Math.floor(stat.mtimeMs);
+      // Skip files that haven't changed — makes this fast on subsequent calls
+      if (getMtime(f.relPath) === mtime) continue;
       upsertImage({ filePath: f.relPath, name: f.name, folder: f.folder, type: f.type,
-        mtime: Math.floor(stat.mtimeMs), size: stat.size });
+        mtime, size: stat.size });
     } catch { /* skip unreadable files */ }
   }
 }
 
 export async function GET() {
   try {
-    if (getCount() === 0) autoSeed();
+    autoSeed(); // always run — skips unchanged files via mtime, picks up new folders instantly
     const result = queryGrouped();
     return NextResponse.json(result);
   } catch (err: unknown) {
