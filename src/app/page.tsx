@@ -130,7 +130,7 @@ const POSITIVE_QUALITIES = [
 // ── Product Spec Configurator ──────────────────────────────────────────
 const PRODUCT_SPECS: { group: string; key: string; options: string[] }[] = [
     // Shot
-    { group: 'Camera angle', key: 'angle', options: ['3/4 view', 'Side profile', 'Top down', 'Front', 'Back'] },
+    { group: 'Camera angle', key: 'angle', options: ['Retain from ref', '3/4 view', 'Side profile', 'Top down', 'Front', 'Back'] },
     { group: 'Crop', key: 'crop', options: ['Close up', 'Full product', 'Wide', 'Far'] },
     // Piano
     { group: 'Model', key: 'model', options: ['DS 5.5', 'DS 6.0', 'DS 6.5'] },
@@ -204,6 +204,7 @@ export default function HomePage() {
 
     // Expand ambiguous labels into precise prompt directives for Gemini
     const SPEC_EXPANSIONS: Record<string, string> = {
+        'Retain from ref': 'CRITICAL — retain the EXACT same camera angle and perspective as shown in the reference image. Do not change the viewpoint, tilt, or framing in any way. Match the reference shot precisely.',
         '3/4 view': 'Three-quarter angle — camera at 45° to the front-left of the product, showing the full front face and left side panel simultaneously (standard hero product shot)',
         'Side profile': 'Pure side profile — camera perfectly perpendicular to the left side, only the side panel visible',
         'Top down': 'Flat lay / top-down — camera directly overhead looking straight down at the product',
