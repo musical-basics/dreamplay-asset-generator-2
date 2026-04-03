@@ -1,0 +1,30 @@
+{
+  "output": {
+    "filePath": "dreamplay-pipeline-repomix.xml",
+    "style": "xml",
+    "removeComments": false,
+    "removeEmptyLines": true,
+    "topFilesLength": 5
+  },
+  "ignore": {
+    "useGitignore": true,
+    "customPatterns": [
+      ".next/**",
+      "out/**",
+      "build/**",
+      "node_modules/**",
+      ".pnpm-store/**",
+      "*.log",
+      "public/generated/**",
+      "public/product-images/**",
+      "public/brand-references/**",
+      ".catalog/**",
+      ".thumbcache/**",
+      ".feedback/**",
+      "repomix-output*",
+      "*.repomix.xml",
+      "**repomix**.xml",
+      "*.tsbuildinfo"
+    ]
+  }
+}

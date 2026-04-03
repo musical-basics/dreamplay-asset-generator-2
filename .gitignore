@@ -24,9 +24,8 @@ public/product-images/**
 !public/product-images/.gitkeep
 
 # Repomix output
-repomix-output*.xml
-repomix-output*.txt
-*.repomix.xml
+**repomix**
+!repomix.config.json
 
 # macOS
 .DS_Store
