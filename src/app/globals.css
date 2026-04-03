@@ -1979,3 +1979,27 @@ select {
   color: var(--accent-red);
   background: rgba(0,0,0,0.85);
 }
+
+.output-thumb-mask {
+  position: absolute;
+  top: 3px; left: 3px;
+  background: rgba(0,0,0,0.6);
+  border: none;
+  border-radius: 50%;
+  color: rgba(255,255,255,0.85);
+  font-size: 0.6rem;
+  width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+  line-height: 1;
+}
+
+.output-thumb-wrap:hover .output-thumb-mask {
+  opacity: 1;
+}
+
+.output-thumb-mask:hover {
+  background: rgba(250, 204, 21, 0.25);
+}

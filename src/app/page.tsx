@@ -680,7 +680,7 @@ export default function HomePage() {
         brandSuffix: string | undefined,
     ) => {
         try {
-            await fetch('/api/save-generation', {
+            const res = await fetch('/api/save-generation', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -697,9 +697,15 @@ export default function HomePage() {
                     createdAt: job.createdAt,
                 }),
             });
+            const data = await res.json();
+            // Swap heavy base64 data URL → lightweight file path so thumbnail persists
+            if (data.path) {
+                setJobs(prev => prev.map(j => j.id === job.id ? { ...j, resultUrl: data.path } : j));
+            }
             loadSavedOutputs();
         } catch (e) { console.warn('[save-generation]', e); }
     }, [loadSavedOutputs]);
+
 
     // Persist prompt + model to localStorage
     useEffect(() => { localStorage.setItem('dp_prompt', prompt); }, [prompt]);
@@ -1298,6 +1304,39 @@ export default function HomePage() {
                                                             title={out.prompt || out.formatLabel || 'Saved output'}>
                                                             <img src={thumbUrl(out.path)} alt="" className="output-thumb" loading="lazy" />
                                                             <div className="output-thumb-label">{out.formatLabel || '—'}</div>
+                                                            {/* Mask & Fix button on saved outputs */}
+                                                            <button
+                                                                className="output-thumb-mask"
+                                                                title="Open Mask & Fix editor"
+                                                                onClick={async e => {
+                                                                    e.stopPropagation();
+                                                                    // Load the saved image from disk as base64 for MaskEditor
+                                                                    try {
+                                                                        const imgRes = await fetch(out.path);
+                                                                        const blob = await imgRes.blob();
+                                                                        const reader = new FileReader();
+                                                                        reader.onload = () => {
+                                                                            const dataUrl = reader.result as string;
+                                                                            const [hdr, b64] = dataUrl.split(',');
+                                                                            const mime = hdr.replace('data:', '').replace(';base64', '');
+                                                                            setMaskEditorJob({
+                                                                                id: `saved-${out.path}`,
+                                                                                batchId: '',
+                                                                                status: 'done',
+                                                                                formatId: out.formatLabel || '',
+                                                                                formatLabel: out.formatLabel || 'Saved',
+                                                                                formatName: out.formatLabel || 'Saved',
+                                                                                modelId: out.modelId || selectedModel,
+                                                                                modelName: out.modelName || '',
+                                                                                prompt: out.prompt || '',
+                                                                                resultUrl: dataUrl,
+                                                                                createdAt: Date.now(),
+                                                                            } as GenerationJob);
+                                                                        };
+                                                                        reader.readAsDataURL(blob);
+                                                                    } catch { /* ignore */ }
+                                                                }}
+                                                            >🎭</button>
                                                             <button className="output-thumb-del" onClick={async e => {
                                                                 e.stopPropagation();
                                                                 await fetch(`/api/save-generation?path=${encodeURIComponent(out.path)}`, { method: 'DELETE' });
