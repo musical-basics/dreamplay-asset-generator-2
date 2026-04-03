@@ -71,47 +71,58 @@ function fmtDuration(s: number) {
     return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-// ─── Library asset type (from Media Indexer catalog) ────────────────────────
-interface LibraryAsset {
-    id: string; filePath: string; fileName: string; fileSize: number;
-    mediaType: 'video' | 'image'; durationSeconds: number | null;
-    subject: string; handZone: string | null; dsModel: string | null;
-    purpose: string; campaign: string; shotType: string; finalStatus: string;
-    colorLabel: string | null; priority: string; mood: string; colorGrade: string;
-    aiDescription: string; aiKeywords: string; thumbPath: string | null;
-    orientation: string | null; width: number | null; height: number | null;
-    codec: string | null; fps: number | null;
-}
-interface LibStats { total: number; finals: number; highPriority: number; }
+// ─── Feedback ──────────────────────────────────────────────────────────────────
+const FEEDBACK_ISSUES = ['Wrong keyboard layout', 'Wrong key count', 'Logo missing/wrong', 'Wrong color/finish', 'Geometry issues', 'Hallucinated elements', 'Poor quality', 'Other'];
 
 export default function HomePage() {
     // ─── Core state ───────────────────────────────────────────────────────────────
 
     const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set());
-    const [selectedModel, setSelectedModel] = useState<string>('gemini-flash-image');
-    const [prompt, setPrompt] = useState('');
-    const [enhancedPrompt, setEnhancedPrompt] = useState('');
+    const [selectedModel, setSelectedModel] = useState<string>(() => typeof window !== 'undefined' ? (localStorage.getItem('dp_model') || 'gemini-flash-image') : 'gemini-flash-image');
+    const [prompt, setPrompt] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('dp_prompt') || '') : '');
+    const [enhancedPrompt, setEnhancedPrompt] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('dp_enhanced_prompt') || '') : '');
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [brandTags, setBrandTags] = useState<string[]>(DEFAULT_BRAND_CONFIG.styleWords);
     const [activeBrandTags, setActiveBrandTags] = useState<Set<string>>(new Set(DEFAULT_BRAND_CONFIG.styleWords));
-    const [useBrandStyle, setUseBrandStyle] = useState<boolean>(true);
-    // ─── Restore persisted state after mount (avoids SSR hydration mismatch) ─────
-    useEffect(() => {
-        setSelectedModel(localStorage.getItem('dp_model') || 'gemini-flash-image');
-        setPrompt(localStorage.getItem('dp_prompt') || '');
-        setEnhancedPrompt(localStorage.getItem('dp_enhanced_prompt') || '');
-        setUseBrandStyle(localStorage.getItem('dp_brand_style') !== 'off');
-        setLeftW(Number(localStorage.getItem('dp_left_w')) || 220);
-        setRightW(Number(localStorage.getItem('dp_right_w')) || 270);
-        try {
-            const storedJobs = JSON.parse(sessionStorage.getItem('dp_jobs') || '[]');
-            if (storedJobs.length) setJobs(storedJobs);
-        } catch { }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    const [useBrandStyle, setUseBrandStyle] = useState<boolean>(() =>
+        typeof window !== 'undefined' ? localStorage.getItem('dp_brand_style') !== 'off' : true
+    );
     useEffect(() => { localStorage.setItem('dp_brand_style', useBrandStyle ? 'on' : 'off'); }, [useBrandStyle]);
 
-    // ─── Panel resize state ─────────────────────────────────────────────────
+    // Brand suffix — only computed when on
+    const brandSuffix = useBrandStyle
+        ? `Style: ${Array.from(activeBrandTags).join(', ')}. Colors: ${DEFAULT_BRAND_CONFIG.colors.join(', ')}. ${DEFAULT_BRAND_CONFIG.customPromptSuffix}`
+        : undefined;
+
+    // ─── Video durations (lazy loaded) ────────────────────────────────────────────
+    const [videoDurations, setVideoDurations] = useState<Record<string, string>>({});
+    const handleVideoMeta = (path: string, e: React.SyntheticEvent<HTMLVideoElement>) => {
+        const dur = (e.target as HTMLVideoElement).duration;
+        if (dur && isFinite(dur)) setVideoDurations(prev => ({ ...prev, [path]: fmtDuration(dur) }));
+    };
+
+    const [rightSections, setRightSections] = useState<Set<string>>(new Set(['model', 'formats', 'prompt']));
+
+    // ─── Feedback state ───────────────────────────────────────────────────
+    const [fbJob, setFbJob] = useState<GenerationJob | null>(null);
+    const [fbIssues, setFbIssues] = useState<string[]>([]);
+    const [fbNote, setFbNote] = useState('');
+    const [fbSubmitting, setFbSubmitting] = useState(false);
+    const openFeedback = (job: GenerationJob, e: React.MouseEvent) => { e.stopPropagation(); setFbJob(job); setFbIssues([]); setFbNote(''); };
+    const closeFeedback = () => setFbJob(null);
+    const toggleIssue = (issue: string) => setFbIssues(prev => prev.includes(issue) ? prev.filter(i => i !== issue) : [...prev, issue]);
+    const submitFeedback = async (regenAfter: boolean) => {
+        if (!fbJob) return;
+        setFbSubmitting(true);
+        const payload = { jobId: fbJob.id, prompt: fbJob.prompt, model: fbJob.modelName, format: fbJob.formatLabel, issues: fbIssues, note: fbNote, regenAfter };
+        try {
+            await fetch('/api/save-generation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, type: 'feedback' }) });
+        } catch { /* ignore */ }
+        setFbSubmitting(false);
+        closeFeedback();
+    };
+
+    // ─── Panel resize state ────────────────────────────────────────────
     const [leftW, setLeftW] = useState(220);
     const [rightW, setRightW] = useState(270);
     const dragRef = useRef<{ which: 'left' | 'right'; startX: number; startW: number } | null>(null);
@@ -143,7 +154,7 @@ export default function HomePage() {
         window.addEventListener('mouseup', onUp);
     }, [leftW, rightW]);
 
-    // ─── Index Library state ───────────────────────────────────────────────
+    // ─── Index Library state ──────────────────────────────────────────
     const [indexing, setIndexing] = useState(false);
     const [indexMsg, setIndexMsg] = useState('');
     const runIndexLibrary = async () => {
@@ -152,206 +163,12 @@ export default function HomePage() {
             const res = await fetch('/api/index-library', { method: 'POST' });
             const d = await res.json();
             setIndexMsg(d.ok ? `✓ Indexed ${d.indexed} files (${d.skipped} up to date)` : `Error: ${d.error}`);
-            // Refresh library after indexing
             const lib = await fetch('/api/product-images').then(r => r.json());
             if (lib.grouped) setProductLibrary(lib.grouped);
         } catch (e) { setIndexMsg(String(e)); }
         setIndexing(false);
         setTimeout(() => setIndexMsg(''), 5000);
     };
-
-    // ─── Feedback system ───────────────────────────────────────────────
-    const FEEDBACK_ISSUES = [
-        'Wrong keyboard layout', 'Wrong key count', 'Wrong black-key pattern',
-        'Wrong colors', 'Wrong product', 'Missing logo', 'Low quality',
-        'Wrong composition', 'Off-brand style', 'Other',
-    ];
-    const [fbJob, setFbJob] = useState<GenerationJob | null>(null);   // job being reviewed
-    const [fbIssues, setFbIssues] = useState<string[]>([]);
-    const [fbNote, setFbNote] = useState('');
-    const [fbSubmitting, setFbSubmitting] = useState(false);
-
-    const openFeedback = (job: GenerationJob, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setFbJob(job); setFbIssues([]); setFbNote('');
-    };
-    const closeFeedback = () => { setFbJob(null); setFbIssues([]); setFbNote(''); };
-    const toggleIssue = (issue: string) =>
-        setFbIssues(prev => prev.includes(issue) ? prev.filter(i => i !== issue) : [...prev, issue]);
-
-    const rateJob = (jobId: string, rating: 'good' | 'bad') =>
-        setJobs(prev => prev.map(j => j.id === jobId ? { ...j, feedback: rating } : j));
-
-    const submitFeedback = async (andRegenerate: boolean) => {
-        if (!fbJob) return;
-        setFbSubmitting(true);
-        rateJob(fbJob.id, 'bad');
-        await fetch('/api/feedback', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jobId: fbJob.id, modelId: fbJob.modelId, prompt: fbJob.prompt,
-                formatLabel: fbJob.formatLabel, issues: fbIssues, note: fbNote, rating: 'bad',
-            }),
-        }).catch(() => {});
-
-        if (andRegenerate) {
-            // Build a correction suffix from the selected issues
-            const corrections: string[] = [];
-            if (fbIssues.some(i => i.includes('keyboard') || i.includes('key') || i.includes('black-key')))
-                corrections.push('CRITICAL FIX: The piano keyboard must have exactly the 2-black-gap-3-black-gap repeating pattern. Count each group carefully.');
-            if (fbIssues.includes('Wrong colors'))
-                corrections.push('CRITICAL: Match the DreamPlay brand colors — matte black chassis, gold/champagne logo, white keys.');
-            if (fbIssues.includes('Missing logo'))
-                corrections.push('The DreamPlay logo must be clearly visible on the product.');
-            if (fbIssues.includes('Wrong product'))
-                corrections.push('Focus exclusively on the DS 6.0 88-key piano shown in the reference images.');
-            if (fbIssues.includes('Wrong composition'))
-                corrections.push('Re-compose the shot as specified in the format guidelines.');
-            if (fbNote) corrections.push(`User note: ${fbNote}`);
-
-            const correctionPrompt = corrections.length > 0
-                ? `\n\n[CORRECTION FROM PREVIOUS FAILED ATTEMPT: ${corrections.join(' ')}]`
-                : '\n\n[Please correct the issues from the previous generation attempt.]';
-
-            // Regenerate this specific job format
-            const fmt = OUTPUT_FORMATS.find(f => f.label === fbJob.formatLabel);
-            if (fmt) {
-                const newJobId = `${Date.now()}-${Math.random()}`;
-                const newJob: GenerationJob = {
-                    id: newJobId, batchId: `b-${Date.now()}`,
-                    formatId: fmt.id, formatLabel: fmt.label,
-                    modelId: fbJob.modelId, modelName: fbJob.modelName,
-                    status: 'processing', prompt: fbJob.prompt + correctionPrompt,
-                    createdAt: Date.now(),
-                };
-                setJobs(prev => [newJob, ...prev]);
-                try {
-                    const res = await fetch('/api/generate-image', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            prompt: newJob.prompt, modelId: newJob.modelId,
-                            aspectRatio: fmt.aspectRatio,
-                            refImagePaths: selectedRefPaths,
-                            brandSuffix: brandSuffix ?? null,
-                        }),
-                    });
-                    const data = await res.json();
-                    if (data.base64) {
-                        const resultUrl = `data:${data.mimeType || 'image/png'};base64,${data.base64}`;
-                        setJobs(prev => prev.map(j => j.id === newJobId
-                            ? { ...j, status: 'done', resultUrl, completedAt: Date.now() } : j));
-                        saveGenerationToDisk(newJob, data.base64, data.mimeType || 'image/png', selectedRefPaths, brandSuffix ?? undefined);
-                    } else {
-                        setJobs(prev => prev.map(j => j.id === newJobId
-                            ? { ...j, status: 'error', error: data.error || 'No image' } : j));
-                    }
-                } catch (err) {
-                    setJobs(prev => prev.map(j => j.id === newJobId
-                        ? { ...j, status: 'error', error: String(err) } : j));
-                }
-            }
-        }
-        setFbSubmitting(false);
-        closeFeedback();
-    };
-
-    // Brand suffix — only computed when on
-    const brandSuffix = useBrandStyle
-        ? `Style: ${Array.from(activeBrandTags).join(', ')}. Colors: ${DEFAULT_BRAND_CONFIG.colors.join(', ')}. ${DEFAULT_BRAND_CONFIG.customPromptSuffix}`
-        : undefined;
-
-    // ─── Video durations (lazy loaded) ────────────────────────────────────────────
-    const [videoDurations, setVideoDurations] = useState<Record<string, string>>({});
-    const handleVideoMeta = (path: string, e: React.SyntheticEvent<HTMLVideoElement>) => {
-        const dur = (e.target as HTMLVideoElement).duration;
-        if (dur && isFinite(dur)) setVideoDurations(prev => ({ ...prev, [path]: fmtDuration(dur) }));
-    };
-
-    const [rightSections, setRightSections] = useState<Set<string>>(new Set(['model', 'formats', 'prompt']));
-
-    // ─── Tab: Generator vs Library ────────────────────────────────────────────────
-    const [activeTab, setActiveTab] = useState<'generator' | 'library'>('generator');
-    const [libAssets, setLibAssets] = useState<LibraryAsset[]>([]);
-    const [libTotal, setLibTotal] = useState(0);
-    const [libStats, setLibStats] = useState<LibStats>({ total: 0, finals: 0, highPriority: 0 });
-    const [libSelected, setLibSelected] = useState<Set<string>>(new Set());
-    const [libLoading, setLibLoading] = useState(false);
-    const [libNotIndexed, setLibNotIndexed] = useState(false);
-    const [libDetail, setLibDetail] = useState<LibraryAsset | null>(null);
-    const [libCopyMsg, setLibCopyMsg] = useState('');
-    const [libExporting, setLibExporting] = useState(false);
-    const [libFilters, setLibFilters] = useState({
-        search: '', finalStatus: '', priority: '', subject: '',
-        handZone: '', dsModel: '', purpose: '', campaign: '',
-        shotType: '', colorLabel: '', mediaType: '', orientation: '',
-    });
-    const libLastClick = useRef<string | null>(null);
-
-    const fetchLibrary = useCallback(async () => {
-        setLibLoading(true);
-        const params = new URLSearchParams();
-        Object.entries(libFilters).forEach(([k, v]) => { if (v) params.set(k, v); });
-        try {
-            const res = await fetch(`/api/media-library?${params}`);
-            const data = await res.json();
-            if (data.notIndexed) { setLibNotIndexed(true); setLibAssets([]); }
-            else { setLibNotIndexed(false); setLibAssets(data.assets ?? []); setLibTotal(data.total ?? 0); setLibStats(data.stats ?? { total: 0, finals: 0, highPriority: 0 }); }
-        } catch { }
-        setLibLoading(false);
-    }, [libFilters]);
-
-    useEffect(() => { if (activeTab === 'library') fetchLibrary(); }, [activeTab, fetchLibrary]);
-
-    function setLibFilter(key: string, value: string) {
-        setLibFilters(prev => ({ ...prev, [key]: (prev as Record<string, string>)[key] === value ? '' : value }));
-    }
-
-    function handleLibClick(asset: LibraryAsset, e: React.MouseEvent) {
-        if (e.shiftKey && libLastClick.current) {
-            const ids = libAssets.map(a => a.id);
-            const li = ids.indexOf(libLastClick.current); const ci = ids.indexOf(asset.id);
-            const [s, en] = li < ci ? [li, ci] : [ci, li];
-            setLibSelected(prev => { const n = new Set(prev); ids.slice(s, en + 1).forEach(id => n.add(id)); return n; });
-        } else if (e.metaKey || e.ctrlKey) {
-            setLibSelected(prev => { const n = new Set(prev); n.has(asset.id) ? n.delete(asset.id) : n.add(asset.id); return n; });
-        } else if (e.altKey) { setLibDetail(asset); }
-        else { setLibSelected(prev => { const n = new Set(prev); n.has(asset.id) ? n.delete(asset.id) : (n.clear(), n.add(asset.id)); return n; }); }
-        libLastClick.current = asset.id;
-    }
-
-    async function handleLibExport(format: 'davinci' | 'fcpxml') {
-        if (!libSelected.size) return;
-        setLibExporting(true);
-        try {
-            const res = await fetch('http://localhost:3001/api/export', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: Array.from(libSelected), format, timelineName: 'DreamPlay Timeline' }),
-            });
-            const blob = await res.blob();
-            const cd = res.headers.get('Content-Disposition') ?? '';
-            const fn = cd.match(/filename="(.+)"/);
-            const filename = fn ? fn[1] : `timeline.${format === 'fcpxml' ? 'fcpxml' : 'xml'}`;
-            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
-        } catch (e) { alert('Export failed — make sure the Media Indexer is running at localhost:3001'); console.error(e); }
-        setLibExporting(false);
-    }
-
-    function handleLibCopyPaths() {
-        const sel = libAssets.filter(a => libSelected.has(a.id));
-        navigator.clipboard.writeText(sel.map(a => a.filePath).join('\n'));
-        setLibCopyMsg('Copied!'); setTimeout(() => setLibCopyMsg(''), 2000);
-    }
-
-    const libSelectedAssets = libAssets.filter(a => libSelected.has(a.id));
-    const libTotalDur = libSelectedAssets.reduce((s, a) => s + (a.durationSeconds ?? 0), 0);
-    function libThumbUrl(asset: LibraryAsset) { return asset.thumbPath ? `/api/media-thumb?path=${encodeURIComponent(asset.thumbPath)}` : ''; }
-    function libFmtDur(s: number | null) { if (!s) return ''; return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`; }
-    function libFmtBytes(b: number) { if (b > 1e9) return `${(b / 1e9).toFixed(1)} GB`; if (b > 1e6) return `${(b / 1e6).toFixed(1)} MB`; return `${(b / 1e3).toFixed(0)} KB`; }
-    const LIB_COLORS: Record<string, string> = { red: '#ef4444', orange: '#f97316', yellow: '#eab308', green: '#22c55e', blue: '#3b82f6', purple: '#a855f7', gray: '#6b7280' };
-    const LIB_SUBJECTS = ['hands', 'piano-keys', 'piano-full', 'talking-head', 'lifestyle', 'product', 'abstract', 'mixed'];
-    const LIB_PURPOSES = ['education', 'marketing', 'social-reel', 'product-demo', 'testimonial', 'b-roll'];
-    const LIB_CAMPAIGNS = ['CEO Spotlight', 'Piano Comparison', 'Handspan Measurement', 'La Campanella', 'NAMM', 'Duel Piano', 'Other'];
 
     // ─── Product library ──────────────────────────────────────────────────────────
     const [productLibrary, setProductLibrary] = useState<Record<string, { path: string; name: string }[]>>({});
@@ -401,7 +218,10 @@ export default function HomePage() {
     const [filterLabel, setFilterLabel] = useState<LabelColor | 'all'>('all');
 
     // ─── Jobs (persisted to sessionStorage so clicks don't lose outputs) ──────
-    const [jobs, setJobs] = useState<GenerationJob[]>([]);
+    const [jobs, setJobs] = useState<GenerationJob[]>(() => {
+        if (typeof window === 'undefined') return [];
+        try { return JSON.parse(sessionStorage.getItem('dp_jobs') || '[]'); } catch { return []; }
+    });
     const [isGenerating, setIsGenerating] = useState(false);
     useEffect(() => { sessionStorage.setItem('dp_jobs', JSON.stringify(jobs)); }, [jobs]);
 
@@ -824,19 +644,7 @@ export default function HomePage() {
                 <div className="toolbar-left">
                     <div className="toolbar-logo">
                         <div className="logo-mark">🎹</div>
-                        <div><div className="logo-text">DreamPlay</div><div className="logo-sub">{activeTab === 'library' ? 'Media Library' : 'Asset Generator'}</div></div>
-                    </div>
-                    <div className="toolbar-divider" />
-                    {/* Tab switcher */}
-                    <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: '3px' }}>
-                        <button
-                            onClick={() => setActiveTab('generator')}
-                            style={{ border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: activeTab === 'generator' ? 'var(--accent)' : 'transparent', color: activeTab === 'generator' ? '#fff' : 'var(--text-muted)' }}
-                        >⚡ Generator</button>
-                        <button
-                            onClick={() => setActiveTab('library')}
-                            style={{ border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: activeTab === 'library' ? '#c9a84c' : 'transparent', color: activeTab === 'library' ? '#000' : 'var(--text-muted)' }}
-                        >🎬 Media Library {libStats.total > 0 && <span style={{ background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '0 4px', marginLeft: 4, fontSize: '0.6rem' }}>{libStats.total}</span>}</button>
+                        <div><div className="logo-text">DreamPlay</div><div className="logo-sub">Asset Generator</div></div>
                     </div>
                     <div className="toolbar-divider" />
                     <div className="api-status connected">
@@ -845,15 +653,12 @@ export default function HomePage() {
                     </div>
                 </div>
                 <div className="toolbar-center">
-                    {activeTab === 'generator' && <div className="toolbar-breadcrumb">
+                    <div className="toolbar-breadcrumb">
                         <span>Library</span>
                         {!showAllFolders && selectedFolder && <><span className="sep">›</span><span className="current">{selectedFolder}</span></>}
                         {showAllFolders && <><span className="sep">›</span><span className="current">All Folders</span></>}
                         {(previewImage || currentPreviewJob) && <><span className="sep">›</span><span className="current">{currentPreviewJob ? currentPreviewJob.formatName : 'Preview'}</span></>}
-                    </div>}
-                    {activeTab === 'library' && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        {libStats.finals} finals · {libStats.highPriority} priority
-                    </div>}
+                    </div>
                 </div>
                 <div className="toolbar-right" />
             </header>
@@ -1342,10 +1147,10 @@ export default function HomePage() {
                     )}
                 </main>
 
-                {/* RIGHT PANEL */}
                 {/* CENTER–RIGHT RESIZER */}
                 <div className="panel-resizer" onMouseDown={e => startPanelDrag('right', e)} />
 
+                {/* RIGHT PANEL */}
                 <aside className="right-panel" style={{ width: rightW, minWidth: rightW, maxWidth: rightW, flexShrink: 0 }}>
                     <div className="right-panel-scroll">
 
@@ -1511,24 +1316,13 @@ export default function HomePage() {
                                     <div key={job.id} className={`strip-item${activeStrip === job.id ? ' active' : ''}`}
                                         onClick={() => { setActiveStrip(job.id); setPreviewImage(null); }}>
                                         {job.status === 'done' && job.resultUrl ? (
-                                            <img src={job.resultUrl} alt={job.formatLabel} loading="lazy" />
+                                            <img src={job.resultUrl} alt={job.formatName} loading="lazy" />
                                         ) : (
                                             <div className={`strip-status ${job.status}`}>
                                                 {job.status === 'processing' && <span className="spinner" />}
                                                 {job.status === 'queued' && <span>⏳</span>}
                                                 {job.status === 'error' && <span>⚠</span>}
                                                 <span>{job.status}</span>
-                                            </div>
-                                        )}
-                                        {/* Feedback thumbs — only on completed jobs */}
-                                        {job.status === 'done' && (
-                                            <div className="strip-feedback">
-                                                <button className={`strip-fb-btn good${job.feedback === 'good' ? ' active' : ''}`}
-                                                    onClick={e => { e.stopPropagation(); rateJob(job.id, 'good'); fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: job.id, modelId: job.modelId, prompt: job.prompt, formatLabel: job.formatLabel, issues: [], rating: 'good' }) }); }}
-                                                    title="Good generation">👍</button>
-                                                <button className={`strip-fb-btn bad${job.feedback === 'bad' ? ' active' : ''}`}
-                                                    onClick={e => openFeedback(job, e)}
-                                                    title="Flag issues">👎</button>
                                             </div>
                                         )}
                                         <div className="strip-label">{job.formatLabel}</div>
@@ -1539,196 +1333,6 @@ export default function HomePage() {
                     ));
                 })()}
             </footer>
-
-            {/* ── LIBRARY PANEL (replaces panels-row when active) ── */}
-            {activeTab === 'library' && (
-                <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-                    {/* Library sidebar */}
-                    <aside style={{ width: 240, minWidth: 240, background: 'var(--lr-bg)', borderRight: '1px solid var(--lr-border)', overflowY: 'auto', padding: '10px 0 80px' }}>
-                        {/* Search */}
-                        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--lr-border)' }}>
-                            <input style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--lr-border)', borderRadius: 6, padding: '7px 9px', color: 'var(--text-primary)', fontSize: '0.7rem', fontFamily: 'inherit', outline: 'none' }}
-                                placeholder="Search assets…" value={libFilters.search}
-                                onChange={e => setLibFilters(prev => ({ ...prev, search: e.target.value }))}
-                                onFocus={e => (e.target.style.borderColor = '#c9a84c')}
-                                onBlur={e => (e.target.style.borderColor = 'var(--lr-border)')}
-                            />
-                        </div>
-                        {/* Quick filters */}
-                        {[
-                            { label: 'QUICK', filters: [['priority', 'high', '⚡ Priority'], ['finalStatus', 'final', '✅ Finals'], ['mediaType', 'video', '🎬 Video'], ['mediaType', 'image', '🖼 Photo']] as [string, string, string][] },
-                            { label: 'HAND ZONE', filters: [['handZone', 'Zone A', 'Zone A (DS5.5)'], ['handZone', 'Zone B', 'Zone B (DS6.0)'], ['handZone', 'Zone C', 'Zone C (DS6.5)']] as [string, string, string][] },
-                            { label: 'DS MODEL', filters: [['dsModel', 'DS5.5', 'DS5.5'], ['dsModel', 'DS6.0', 'DS6.0'], ['dsModel', 'DS6.5', 'DS6.5']] as [string, string, string][] },
-                        ].map(({ label, filters }) => (
-                            <div key={label} style={{ padding: '8px 12px', borderBottom: '1px solid var(--lr-border)' }}>
-                                <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{label}</div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                    {filters.map(([k, v, l]) => {
-                                        const isActive = (libFilters as Record<string, string>)[k] === v;
-                                        return <button key={v} onClick={() => setLibFilter(k, v)}
-                                            style={{ border: `1px solid ${isActive ? '#c9a84c' : 'var(--lr-border)'}`, borderRadius: 20, padding: '3px 9px', fontSize: '0.62rem', background: isActive ? 'rgba(201,168,76,0.15)' : 'rgba(255,255,255,0.04)', color: isActive ? '#c9a84c' : 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>{l}</button>;
-                                    })}
-                                </div>
-                            </div>
-                        ))}
-                        {/* Color labels */}
-                        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--lr-border)' }}>
-                            <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>COLOR LABEL</div>
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                {Object.entries(LIB_COLORS).map(([key, bg]) => (
-                                    <button key={key} title={key}
-                                        onClick={() => setLibFilter('colorLabel', key)}
-                                        style={{ width: 20, height: 20, borderRadius: '50%', background: bg, border: libFilters.colorLabel === key ? '2px solid #fff' : '2px solid transparent', cursor: 'pointer', transform: libFilters.colorLabel === key ? 'scale(1.2)' : 'none', transition: 'transform 0.15s' }} />
-                                ))}
-                            </div>
-                        </div>
-                        {/* Subject, Purpose, Campaign */}
-                        {[
-                            { label: 'SUBJECT', key: 'subject', items: LIB_SUBJECTS },
-                            { label: 'PURPOSE', key: 'purpose', items: LIB_PURPOSES },
-                            { label: 'CAMPAIGN', key: 'campaign', items: LIB_CAMPAIGNS },
-                            { label: 'STATUS', key: 'finalStatus', items: ['final', 'raw', 'intermediate'] },
-                        ].map(({ label, key, items }) => (
-                            <div key={key} style={{ padding: '8px 12px', borderBottom: '1px solid var(--lr-border)' }}>
-                                <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{label}</div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                    {items.map(v => {
-                                        const isActive = (libFilters as Record<string, string>)[key] === v;
-                                        return <button key={v} onClick={() => setLibFilter(key, v)}
-                                            style={{ border: `1px solid ${isActive ? '#c9a84c' : 'var(--lr-border)'}`, borderRadius: 20, padding: '3px 8px', fontSize: '0.6rem', background: isActive ? 'rgba(201,168,76,0.15)' : 'rgba(255,255,255,0.04)', color: isActive ? '#c9a84c' : 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit' }}>{v}</button>;
-                                    })}
-                                </div>
-                            </div>
-                        ))}
-                        {/* Reset */}
-                        {Object.values(libFilters).some(v => v) && (
-                            <div style={{ padding: '10px 12px' }}>
-                                <button onClick={() => setLibFilters({ search: '', finalStatus: '', priority: '', subject: '', handZone: '', dsModel: '', purpose: '', campaign: '', shotType: '', colorLabel: '', mediaType: '', orientation: '' })}
-                                    style={{ width: '100%', padding: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, color: '#ef4444', fontSize: '0.65rem', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    ✕ Clear All Filters
-                                </button>
-                            </div>
-                        )}
-                    </aside>
-
-                    {/* Library main grid */}
-                    <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#0a0a0b' }}>
-                        <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--lr-border)', display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.7rem', color: 'var(--text-muted)', minHeight: 38 }}>
-                            {libLoading ? 'Loading…' : libNotIndexed
-                                ? '⚠ Not yet indexed — run pnpm ingest in the Media Indexer app'
-                                : `${libTotal.toLocaleString()} assets`}
-                            {libSelected.size > 0 && <span style={{ background: 'rgba(201,168,76,0.15)', border: '1px solid rgba(201,168,76,0.3)', color: '#c9a84c', borderRadius: 20, padding: '1px 8px', fontSize: '0.62rem' }}>{libSelected.size} selected</span>}
-                            {libSelected.size > 0 && <button style={{ marginLeft: 'auto', border: '1px solid var(--lr-border)', borderRadius: 6, background: 'transparent', color: 'var(--text-muted)', padding: '3px 8px', fontSize: '0.62rem', cursor: 'pointer' }} onClick={() => setLibSelected(new Set())}>Deselect All</button>}
-                        </div>
-                        <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8, alignContent: 'start' }}>
-                            {libAssets.map(asset => {
-                                const isSel = libSelected.has(asset.id);
-                                const thumb = libThumbUrl(asset);
-                                const keywords: string[] = (() => { try { return JSON.parse(asset.aiKeywords); } catch { return []; } })();
-                                return (
-                                    <div key={asset.id}
-                                        onClick={e => handleLibClick(asset, e)}
-                                        onDoubleClick={() => setLibDetail(asset)}
-                                        style={{ background: 'var(--lr-bg)', border: `1.5px solid ${isSel ? '#c9a84c' : 'rgba(255,255,255,0.06)'}`, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', transition: 'border-color 0.15s, transform 0.15s', userSelect: 'none', position: 'relative', boxShadow: isSel ? '0 0 0 1px #c9a84c' : 'none' }}
-                                    >
-                                        <div style={{ width: '100%', aspectRatio: '16/9', background: 'rgba(255,255,255,0.04)', position: 'relative', overflow: 'hidden' }}>
-                                            {thumb ? <img src={thumb} alt={asset.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" />
-                                                : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, opacity: 0.3 }}>{asset.mediaType === 'video' ? '🎬' : '🖼'}</div>}
-                                            {asset.mediaType === 'video' && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}><span style={{ fontSize: 20, opacity: 0.8 }}>▶</span></div>}
-                                            {asset.durationSeconds && <span style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: '0.58rem', fontWeight: 600, padding: '1px 4px', borderRadius: 3 }}>{libFmtDur(asset.durationSeconds)}</span>}
-                                            {asset.finalStatus === 'final' && <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(34,197,94,0.9)', color: '#fff', fontSize: '0.5rem', fontWeight: 700, padding: '1px 4px', borderRadius: 3, letterSpacing: '0.5px' }}>FINAL</span>}
-                                            {asset.priority === 'high' && <span style={{ position: 'absolute', top: 4, right: 4, width: 9, height: 9, borderRadius: '50%', background: asset.colorLabel ? LIB_COLORS[asset.colorLabel] || '#ef4444' : '#ef4444', border: '1.5px solid rgba(255,255,255,0.5)', display: 'block' }} />}
-                                            {isSel && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(201,168,76,0.2)', color: '#c9a84c', fontSize: 26, fontWeight: 700 }}>✓</div>}
-                                        </div>
-                                        <div style={{ padding: '6px 7px' }}>
-                                            <div style={{ fontSize: '0.62rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }} title={asset.fileName}>{asset.fileName}</div>
-                                            <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', marginBottom: 4 }}>{asset.aiDescription || '—'}</div>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                                                {asset.subject !== 'unknown' && <span style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 3, padding: '1px 4px', fontSize: '0.52rem', color: 'var(--text-muted)' }}>{asset.subject}</span>}
-                                                {asset.handZone && <span style={{ background: 'rgba(74,158,255,0.1)', border: '1px solid rgba(74,158,255,0.3)', borderRadius: 3, padding: '1px 4px', fontSize: '0.52rem', color: '#4a9eff' }}>{asset.handZone}</span>}
-                                                {asset.dsModel && <span style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 3, padding: '1px 4px', fontSize: '0.52rem', color: '#c9a84c' }}>{asset.dsModel}</span>}
-                                                {keywords.slice(0, 1).map((k, i) => <span key={i} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3, padding: '1px 4px', fontSize: '0.52rem', color: 'var(--text-muted)', opacity: 0.6 }}>{k}</span>)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                            {!libLoading && libAssets.length === 0 && !libNotIndexed && (
-                                <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '80px 20px', textAlign: 'center' }}>
-                                    <div style={{ fontSize: 48, opacity: 0.3 }}>🎹</div>
-                                    <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-muted)' }}>No assets found</div>
-                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', opacity: 0.6 }}>Try adjusting your filters</div>
-                                </div>
-                            )}
-                            {libNotIndexed && (
-                                <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '80px 20px', textAlign: 'center' }}>
-                                    <div style={{ fontSize: 48 }}>⚙</div>
-                                    <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-muted)' }}>Catalog not found yet</div>
-                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', opacity: 0.6, lineHeight: 1.8 }}>
-                                        The ingestion agent is building the catalog.<br />
-                                        Run: <code style={{ background: 'rgba(255,255,255,0.08)', padding: '2px 6px', borderRadius: 4 }}>pnpm ingest</code> in the Media Indexer app.
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </main>
-
-                    {/* Library export tray */}
-                    {libSelected.size > 0 && (
-                        <div style={{ position: 'fixed', bottom: 0, left: 240, right: 0, height: 60, background: 'var(--lr-bg)', borderTop: '1px solid rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', zIndex: 20 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span style={{ fontWeight: 600, color: '#c9a84c', fontSize: 14 }}>{libSelected.size} clips selected</span>
-                                {libTotalDur > 0 && <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>· {libFmtDur(libTotalDur)} total</span>}
-                            </div>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                <button style={{ border: '1px solid var(--lr-border)', borderRadius: 6, background: 'transparent', color: 'var(--text-muted)', padding: '7px 12px', fontSize: '0.68rem', cursor: 'pointer' }} onClick={handleLibCopyPaths}>{libCopyMsg || '📋 Copy Paths'}</button>
-                                <button disabled={libExporting} onClick={() => handleLibExport('fcpxml')}
-                                    style={{ border: '1px solid var(--lr-border)', borderRadius: 6, background: 'rgba(255,255,255,0.06)', color: '#fff', padding: '7px 14px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}>
-                                    {libExporting ? '…' : '🎬 Export FCPXML'}
-                                </button>
-                                <button disabled={libExporting} onClick={() => handleLibExport('davinci')}
-                                    style={{ border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #c9a84c, #8a6a1e)', color: '#fff', padding: '7px 14px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}>
-                                    {libExporting ? '…' : '🎨 Export DaVinci XML'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Library detail modal */}
-                    {libDetail && (
-                        <div onClick={() => setLibDetail(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
-                            <div onClick={e => e.stopPropagation()} style={{ background: '#111114', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, width: 520, maxHeight: '82vh', overflowY: 'auto', position: 'relative' }}>
-                                <button onClick={() => setLibDetail(null)} style={{ position: 'absolute', top: 12, right: 14, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 12 }}>✕</button>
-                                {libDetail.thumbPath && <img src={libThumbUrl(libDetail)} alt={libDetail.fileName} style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: '14px 14px 0 0', display: 'block' }} />}
-                                <div style={{ padding: 20 }}>
-                                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4, wordBreak: 'break-all' }}>{libDetail.fileName}</div>
-                                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginBottom: 10, wordBreak: 'break-all', fontFamily: 'monospace' }}>{libDetail.filePath}</div>
-                                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', marginBottom: 14 }}>{libDetail.aiDescription}</div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 14 }}>
-                                        {[['Status', libDetail.finalStatus], ['Priority', libDetail.priority], ['Subject', libDetail.subject], ['Hand Zone', libDetail.handZone ?? '—'], ['DS Model', libDetail.dsModel ?? '—'], ['Purpose', libDetail.purpose], ['Campaign', libDetail.campaign], ['Duration', libFmtDur(libDetail.durationSeconds)], ['Resolution', libDetail.width && libDetail.height ? `${libDetail.width}×${libDetail.height}` : '—'], ['File Size', libFmtBytes(libDetail.fileSize)], ['Color Grade', libDetail.colorGrade || '—'], ['Mood', libDetail.mood || '—']].map(([l, v]) => (
-                                            <div key={l} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 6, padding: '6px 9px', display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
-                                                <span style={{ color: 'var(--text-muted)' }}>{l}</span>
-                                                <span style={{ color: '#fff', fontWeight: 500 }}>{v}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <button onClick={() => { navigator.clipboard.writeText(libDetail.filePath); setLibCopyMsg('Copied!'); setTimeout(() => setLibCopyMsg(''), 1500); }}
-                                        style={{ width: '100%', padding: 9, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '0.7rem' }}>
-                                        {libCopyMsg || '📋 Copy File Path'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* ── Generator panels (hidden when library is active) ── */}
-            <style>{`
-                .panels-row { display: ${activeTab === 'library' ? 'none' : 'flex'} !important; }
-                footer.output-strip-bar { display: ${activeTab === 'library' ? 'none' : ''} !important; }
-            `}</style>
-
             {/* ── FEEDBACK MODAL ── */}
             {fbJob && (
                 <div className="fb-overlay" onClick={closeFeedback}>
@@ -1764,4 +1368,3 @@ export default function HomePage() {
         </div>
     );
 }
-
