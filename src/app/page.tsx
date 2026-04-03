@@ -255,6 +255,7 @@ export default function HomePage() {
 
     // ─── View state ───────────────────────────────────────────────────────────────
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
     const [activeStrip, setActiveStrip] = useState<string | null>(null);
     const [thumbSize, setThumbSize] = useState(90); // px for grid columns
     const [selectedGridImage, setSelectedGridImage] = useState<string | null>(null);
@@ -692,6 +693,7 @@ export default function HomePage() {
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
             // ESC — exit all preview modes
             if (e.key === 'Escape') {
+                if (lightboxSrc) { setLightboxSrc(null); return; }
                 if (activeStrip) { setActiveStrip(null); return; }
                 if (previewImage) { setPreviewImage(null); return; }
             }
@@ -711,7 +713,7 @@ export default function HomePage() {
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [selectedGridImage, imageMeta, activeStrip, previewImage]);
+    }, [selectedGridImage, imageMeta, activeStrip, previewImage, lightboxSrc]);
 
     // ─── Render helpers ───────────────────────────────────────────────────────────
     const selectedImageMeta = selectedGridImage ? getMeta(selectedGridImage) : null;
@@ -960,11 +962,12 @@ export default function HomePage() {
                                                         <div key={out.path} className="output-thumb-wrap"
                                                             onClick={() => {
                                                                 setSelectedOutput(out);
+                                                                setLightboxSrc(out.path);
                                                                 if (out.prompt) setPrompt(out.prompt);
                                                                 if (out.refImagePaths?.length) setSelectedRefPaths(out.refImagePaths.slice());
                                                             }}
                                                             title={out.prompt || out.formatLabel || 'Saved output'}>
-                                                            <img src={out.path} alt="" className="output-thumb" loading="lazy" />
+                                                            <img src={thumbUrl(out.path)} alt="" className="output-thumb" loading="lazy" />
                                                             <div className="output-thumb-label">{out.formatLabel || '—'}</div>
                                                             <button className="output-thumb-del" onClick={async e => {
                                                                 e.stopPropagation();
@@ -1009,24 +1012,6 @@ export default function HomePage() {
                                 ) : (
                                     <div className="center-empty"><div>Queued…</div></div>
                                 )}
-                            </div>
-                        </>
-                    ) : previewImage ? (
-                        /* Large product image preview */
-                        <>
-                            <div className="center-grid-header">
-                                <button className="btn btn-ghost btn-sm" onClick={() => setPreviewImage(null)}>← Grid</button>
-                                <strong style={{ fontSize: '0.72rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewImage.split('/').pop()}</strong>
-                                <button className="btn btn-ghost btn-sm"
-                                    style={{ color: selectedRefPaths.includes(previewImage) ? 'var(--accent)' : undefined }}
-                                    onClick={() => toggleRefSelection(previewImage)}
-                                    disabled={!selectedRefPaths.includes(previewImage) && selectedRefPaths.length >= 5}>
-                                    {selectedRefPaths.includes(previewImage) ? '★ In References' : '☆ Add to References'}
-                                </button>
-                            </div>
-                            <div className="center-preview">
-                                <img src={previewImage} alt="Preview" />
-                                <div className="preview-meta">{previewImage.split('/').pop()}</div>
                             </div>
                         </>
                     ) : (
@@ -1105,7 +1090,7 @@ export default function HomePage() {
                                                         style={{ outline: isSelected ? '2px solid var(--accent)' : 'none', outlineOffset: '-2px' }}
                                                         draggable onDragStart={e => handleDragStart(e, img.path)}
                                                         onClick={e => handleThumbClick(e, img.path, idx)}
-                                                        onDoubleClick={() => setPreviewImage(img.path)}
+                                                        onDoubleClick={() => setLightboxSrc(img.path)}
                                                         title={img.name}>
                                                         {isVideoFile(img.path) ? (
                                                             <>
@@ -1143,7 +1128,7 @@ export default function HomePage() {
                                                     style={{ outline: isSelected ? '2px solid var(--accent)' : 'none', outlineOffset: '-2px' }}
                                                     draggable onDragStart={e => handleDragStart(e, img.path)}
                                                     onClick={e => handleThumbClick(e, img.path, allVisibleImages.findIndex(i => i.path === img.path))}
-                                                    onDoubleClick={() => setPreviewImage(img.path)}
+                                                    onDoubleClick={() => setLightboxSrc(img.path)}
                                                     title={img.name}>
                                                     {isVideoFile(img.path) ? (
                                                         <>
@@ -1454,6 +1439,61 @@ export default function HomePage() {
                     </div>
                 </div>
             )}
+        {/* ─── LIGHTBOX OVERLAY ─────────────────────────────────────── */}
+        {lightboxSrc && (
+            <div
+                style={{
+                    position: 'fixed', inset: 0, zIndex: 9999,
+                    background: 'rgba(0,0,0,0.92)',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    backdropFilter: 'blur(6px)',
+                }}
+                onClick={() => setLightboxSrc(null)}
+            >
+                {/* Toolbar */}
+                <div
+                    style={{
+                        position: 'absolute', top: 0, left: 0, right: 0,
+                        display: 'flex', alignItems: 'center', gap: '0.75rem',
+                        padding: '0.6rem 1rem',
+                        background: 'rgba(0,0,0,0.6)',
+                        backdropFilter: 'blur(8px)',
+                        borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <button className="btn btn-ghost btn-sm" onClick={() => setLightboxSrc(null)}>✕ Close</button>
+                    <span style={{ fontSize: '0.7rem', opacity: 0.6, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {lightboxSrc.split('/').pop()}
+                    </span>
+                    <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: selectedRefPaths.includes(lightboxSrc) ? 'var(--accent)' : undefined }}
+                        onClick={() => toggleRefSelection(lightboxSrc)}
+                        disabled={!selectedRefPaths.includes(lightboxSrc) && selectedRefPaths.length >= 5}
+                    >
+                        {selectedRefPaths.includes(lightboxSrc) ? '★ In References' : '☆ Add to Refs'}
+                    </button>
+                    <a href={lightboxSrc} download className="btn btn-ghost btn-sm">↓ Download</a>
+                </div>
+                {/* Image */}
+                <img
+                    src={lightboxSrc}
+                    alt="Preview"
+                    style={{
+                        maxWidth: 'calc(100vw - 48px)',
+                        maxHeight: 'calc(100vh - 100px)',
+                        objectFit: 'contain',
+                        borderRadius: '4px',
+                        boxShadow: '0 8px 64px rgba(0,0,0,0.8)',
+                        marginTop: '52px',
+                    }}
+                    onClick={e => e.stopPropagation()}
+                />
+                <div style={{ fontSize: '0.62rem', opacity: 0.35, marginTop: '0.4rem' }}>Esc or click outside to close</div>
+            </div>
+        )}
         </div>
     );
 }
