@@ -45,6 +45,7 @@ export interface GenerationJob {
     error?: string;
     createdAt: number;
     completedAt?: number;
+    feedback?: 'good' | 'bad';  // user rating after generation
 }
 
 export interface BrandConfig {

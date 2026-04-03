@@ -1016,6 +1016,91 @@ select {
   display: block;
 }
 
+/* Feedback thumbs — appear on hover over a done strip item */
+.strip-feedback {
+  position: absolute;
+  top: 3px; right: 3px;
+  display: flex; gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 4;
+}
+.strip-item:hover .strip-feedback { opacity: 1; }
+.strip-fb-btn {
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  border: none;
+  font-size: 0.65rem;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.1s;
+}
+.strip-fb-btn:hover { transform: scale(1.15); }
+.strip-fb-btn.good  { background: rgba(48,209,88,0.25); color: #30d158; }
+.strip-fb-btn.bad   { background: rgba(255,69,58,0.25); color: #ff453a; }
+.strip-fb-btn.good.active { background: rgba(48,209,88,0.55); }
+.strip-fb-btn.bad.active  { background: rgba(255,69,58,0.55); }
+
+/* Feedback modal overlay */
+.fb-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+}
+.fb-modal {
+  background: #1e1e22;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  width: 420px;
+  max-width: 95vw;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+}
+.fb-modal-title {
+  font-size: 0.85rem; font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+.fb-modal-sub {
+  font-size: 0.68rem; color: var(--text-muted);
+  margin-bottom: 0.9rem;
+}
+.fb-chips {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+.fb-chip {
+  font-size: 0.65rem; font-weight: 600;
+  padding: 0.22rem 0.6rem;
+  border-radius: 100px;
+  border: 1.5px solid rgba(255,255,255,0.12);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.fb-chip:hover { border-color: var(--accent-red); color: var(--accent-red); }
+.fb-chip.selected {
+  background: rgba(255,69,58,0.15);
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+.fb-note {
+  width: 100%;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  padding: 0.5rem 0.7rem;
+  resize: none; min-height: 56px;
+  margin-bottom: 0.85rem;
+  font-family: var(--font);
+}
+.fb-note:focus { outline: none; border-color: rgba(255,69,58,0.4); }
+.fb-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+
 .strip-status {
   position: absolute;
   inset: 0;

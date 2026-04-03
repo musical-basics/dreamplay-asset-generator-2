@@ -160,6 +160,102 @@ export default function HomePage() {
         setTimeout(() => setIndexMsg(''), 5000);
     };
 
+    // ─── Feedback system ───────────────────────────────────────────────
+    const FEEDBACK_ISSUES = [
+        'Wrong keyboard layout', 'Wrong key count', 'Wrong black-key pattern',
+        'Wrong colors', 'Wrong product', 'Missing logo', 'Low quality',
+        'Wrong composition', 'Off-brand style', 'Other',
+    ];
+    const [fbJob, setFbJob] = useState<GenerationJob | null>(null);   // job being reviewed
+    const [fbIssues, setFbIssues] = useState<string[]>([]);
+    const [fbNote, setFbNote] = useState('');
+    const [fbSubmitting, setFbSubmitting] = useState(false);
+
+    const openFeedback = (job: GenerationJob, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setFbJob(job); setFbIssues([]); setFbNote('');
+    };
+    const closeFeedback = () => { setFbJob(null); setFbIssues([]); setFbNote(''); };
+    const toggleIssue = (issue: string) =>
+        setFbIssues(prev => prev.includes(issue) ? prev.filter(i => i !== issue) : [...prev, issue]);
+
+    const rateJob = (jobId: string, rating: 'good' | 'bad') =>
+        setJobs(prev => prev.map(j => j.id === jobId ? { ...j, feedback: rating } : j));
+
+    const submitFeedback = async (andRegenerate: boolean) => {
+        if (!fbJob) return;
+        setFbSubmitting(true);
+        rateJob(fbJob.id, 'bad');
+        await fetch('/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jobId: fbJob.id, modelId: fbJob.modelId, prompt: fbJob.prompt,
+                formatLabel: fbJob.formatLabel, issues: fbIssues, note: fbNote, rating: 'bad',
+            }),
+        }).catch(() => {});
+
+        if (andRegenerate) {
+            // Build a correction suffix from the selected issues
+            const corrections: string[] = [];
+            if (fbIssues.some(i => i.includes('keyboard') || i.includes('key') || i.includes('black-key')))
+                corrections.push('CRITICAL FIX: The piano keyboard must have exactly the 2-black-gap-3-black-gap repeating pattern. Count each group carefully.');
+            if (fbIssues.includes('Wrong colors'))
+                corrections.push('CRITICAL: Match the DreamPlay brand colors — matte black chassis, gold/champagne logo, white keys.');
+            if (fbIssues.includes('Missing logo'))
+                corrections.push('The DreamPlay logo must be clearly visible on the product.');
+            if (fbIssues.includes('Wrong product'))
+                corrections.push('Focus exclusively on the DS 6.0 88-key piano shown in the reference images.');
+            if (fbIssues.includes('Wrong composition'))
+                corrections.push('Re-compose the shot as specified in the format guidelines.');
+            if (fbNote) corrections.push(`User note: ${fbNote}`);
+
+            const correctionPrompt = corrections.length > 0
+                ? `\n\n[CORRECTION FROM PREVIOUS FAILED ATTEMPT: ${corrections.join(' ')}]`
+                : '\n\n[Please correct the issues from the previous generation attempt.]';
+
+            // Regenerate this specific job format
+            const fmt = OUTPUT_FORMATS.find(f => f.label === fbJob.formatLabel);
+            if (fmt) {
+                const newJobId = `${Date.now()}-${Math.random()}`;
+                const newJob: GenerationJob = {
+                    id: newJobId, batchId: `b-${Date.now()}`,
+                    formatId: fmt.id, formatLabel: fmt.label,
+                    modelId: fbJob.modelId, modelName: fbJob.modelName,
+                    status: 'processing', prompt: fbJob.prompt + correctionPrompt,
+                    createdAt: Date.now(),
+                };
+                setJobs(prev => [newJob, ...prev]);
+                try {
+                    const res = await fetch('/api/generate-image', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            prompt: newJob.prompt, modelId: newJob.modelId,
+                            aspectRatio: fmt.aspectRatio,
+                            refImagePaths: selectedRefPaths,
+                            brandSuffix: brandSuffix ?? null,
+                        }),
+                    });
+                    const data = await res.json();
+                    if (data.base64) {
+                        const resultUrl = `data:${data.mimeType || 'image/png'};base64,${data.base64}`;
+                        setJobs(prev => prev.map(j => j.id === newJobId
+                            ? { ...j, status: 'done', resultUrl, completedAt: Date.now() } : j));
+                        saveGenerationToDisk(newJob, data.base64, data.mimeType || 'image/png', selectedRefPaths, brandSuffix ?? undefined);
+                    } else {
+                        setJobs(prev => prev.map(j => j.id === newJobId
+                            ? { ...j, status: 'error', error: data.error || 'No image' } : j));
+                    }
+                } catch (err) {
+                    setJobs(prev => prev.map(j => j.id === newJobId
+                        ? { ...j, status: 'error', error: String(err) } : j));
+                }
+            }
+        }
+        setFbSubmitting(false);
+        closeFeedback();
+    };
+
     // Brand suffix — only computed when on
     const brandSuffix = useBrandStyle
         ? `Style: ${Array.from(activeBrandTags).join(', ')}. Colors: ${DEFAULT_BRAND_CONFIG.colors.join(', ')}. ${DEFAULT_BRAND_CONFIG.customPromptSuffix}`
@@ -1415,13 +1511,24 @@ export default function HomePage() {
                                     <div key={job.id} className={`strip-item${activeStrip === job.id ? ' active' : ''}`}
                                         onClick={() => { setActiveStrip(job.id); setPreviewImage(null); }}>
                                         {job.status === 'done' && job.resultUrl ? (
-                                            <img src={job.resultUrl} alt={job.formatName} loading="lazy" />
+                                            <img src={job.resultUrl} alt={job.formatLabel} loading="lazy" />
                                         ) : (
                                             <div className={`strip-status ${job.status}`}>
                                                 {job.status === 'processing' && <span className="spinner" />}
                                                 {job.status === 'queued' && <span>⏳</span>}
                                                 {job.status === 'error' && <span>⚠</span>}
                                                 <span>{job.status}</span>
+                                            </div>
+                                        )}
+                                        {/* Feedback thumbs — only on completed jobs */}
+                                        {job.status === 'done' && (
+                                            <div className="strip-feedback">
+                                                <button className={`strip-fb-btn good${job.feedback === 'good' ? ' active' : ''}`}
+                                                    onClick={e => { e.stopPropagation(); rateJob(job.id, 'good'); fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: job.id, modelId: job.modelId, prompt: job.prompt, formatLabel: job.formatLabel, issues: [], rating: 'good' }) }); }}
+                                                    title="Good generation">👍</button>
+                                                <button className={`strip-fb-btn bad${job.feedback === 'bad' ? ' active' : ''}`}
+                                                    onClick={e => openFeedback(job, e)}
+                                                    title="Flag issues">👎</button>
                                             </div>
                                         )}
                                         <div className="strip-label">{job.formatLabel}</div>
@@ -1621,6 +1728,39 @@ export default function HomePage() {
                 .panels-row { display: ${activeTab === 'library' ? 'none' : 'flex'} !important; }
                 footer.output-strip-bar { display: ${activeTab === 'library' ? 'none' : ''} !important; }
             `}</style>
+
+            {/* ── FEEDBACK MODAL ── */}
+            {fbJob && (
+                <div className="fb-overlay" onClick={closeFeedback}>
+                    <div className="fb-modal" onClick={e => e.stopPropagation()}>
+                        <div className="fb-modal-title">👎 Flag Generation Issue</div>
+                        <div className="fb-modal-sub">
+                            {fbJob.formatLabel} · {fbJob.modelName}<br />
+                            Prompt: <em>{(fbJob.prompt || '').slice(0, 80)}{(fbJob.prompt || '').length > 80 ? '…' : ''}</em>
+                        </div>
+                        <div className="fb-chips">
+                            {FEEDBACK_ISSUES.map(issue => (
+                                <button key={issue}
+                                    className={`fb-chip${fbIssues.includes(issue) ? ' selected' : ''}`}
+                                    onClick={() => toggleIssue(issue)}>
+                                    {issue}
+                                </button>
+                            ))}
+                        </div>
+                        <textarea className="fb-note" placeholder="Additional notes (optional)…"
+                            value={fbNote} onChange={e => setFbNote(e.target.value)} />
+                        <div className="fb-actions">
+                            <button className="btn btn-ghost btn-sm" onClick={closeFeedback} disabled={fbSubmitting}>Cancel</button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => submitFeedback(false)} disabled={fbSubmitting}>
+                                {fbSubmitting ? 'Saving…' : '💾 Save Feedback'}
+                            </button>
+                            <button className="btn btn-gold btn-sm" onClick={() => submitFeedback(true)} disabled={fbSubmitting}>
+                                {fbSubmitting ? 'Generating…' : '⚡ Fix & Re-generate'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
