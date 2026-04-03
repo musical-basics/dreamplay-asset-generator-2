@@ -77,7 +77,7 @@ interface LibraryAsset {
     mediaType: 'video' | 'image'; durationSeconds: number | null;
     subject: string; handZone: string | null; dsModel: string | null;
     purpose: string; campaign: string; shotType: string; finalStatus: string;
-    colorLabel: string | null; priority: string; mood: string;
+    colorLabel: string | null; priority: string; mood: string; colorGrade: string;
     aiDescription: string; aiKeywords: string; thumbPath: string | null;
     orientation: string | null; width: number | null; height: number | null;
     codec: string | null; fps: number | null;
@@ -1354,6 +1354,196 @@ export default function HomePage() {
                     ));
                 })()}
             </footer>
+
+            {/* ── LIBRARY PANEL (replaces panels-row when active) ── */}
+            {activeTab === 'library' && (
+                <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+                    {/* Library sidebar */}
+                    <aside style={{ width: 240, minWidth: 240, background: 'var(--lr-bg)', borderRight: '1px solid var(--lr-border)', overflowY: 'auto', padding: '10px 0 80px' }}>
+                        {/* Search */}
+                        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--lr-border)' }}>
+                            <input style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--lr-border)', borderRadius: 6, padding: '7px 9px', color: 'var(--text-primary)', fontSize: '0.7rem', fontFamily: 'inherit', outline: 'none' }}
+                                placeholder="Search assets…" value={libFilters.search}
+                                onChange={e => setLibFilters(prev => ({ ...prev, search: e.target.value }))}
+                                onFocus={e => (e.target.style.borderColor = '#c9a84c')}
+                                onBlur={e => (e.target.style.borderColor = 'var(--lr-border)')}
+                            />
+                        </div>
+                        {/* Quick filters */}
+                        {[
+                            { label: 'QUICK', filters: [['priority', 'high', '⚡ Priority'], ['finalStatus', 'final', '✅ Finals'], ['mediaType', 'video', '🎬 Video'], ['mediaType', 'image', '🖼 Photo']] as [string, string, string][] },
+                            { label: 'HAND ZONE', filters: [['handZone', 'Zone A', 'Zone A (DS5.5)'], ['handZone', 'Zone B', 'Zone B (DS6.0)'], ['handZone', 'Zone C', 'Zone C (DS6.5)']] as [string, string, string][] },
+                            { label: 'DS MODEL', filters: [['dsModel', 'DS5.5', 'DS5.5'], ['dsModel', 'DS6.0', 'DS6.0'], ['dsModel', 'DS6.5', 'DS6.5']] as [string, string, string][] },
+                        ].map(({ label, filters }) => (
+                            <div key={label} style={{ padding: '8px 12px', borderBottom: '1px solid var(--lr-border)' }}>
+                                <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{label}</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                    {filters.map(([k, v, l]) => {
+                                        const isActive = (libFilters as Record<string, string>)[k] === v;
+                                        return <button key={v} onClick={() => setLibFilter(k, v)}
+                                            style={{ border: `1px solid ${isActive ? '#c9a84c' : 'var(--lr-border)'}`, borderRadius: 20, padding: '3px 9px', fontSize: '0.62rem', background: isActive ? 'rgba(201,168,76,0.15)' : 'rgba(255,255,255,0.04)', color: isActive ? '#c9a84c' : 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>{l}</button>;
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                        {/* Color labels */}
+                        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--lr-border)' }}>
+                            <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>COLOR LABEL</div>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {Object.entries(LIB_COLORS).map(([key, bg]) => (
+                                    <button key={key} title={key}
+                                        onClick={() => setLibFilter('colorLabel', key)}
+                                        style={{ width: 20, height: 20, borderRadius: '50%', background: bg, border: libFilters.colorLabel === key ? '2px solid #fff' : '2px solid transparent', cursor: 'pointer', transform: libFilters.colorLabel === key ? 'scale(1.2)' : 'none', transition: 'transform 0.15s' }} />
+                                ))}
+                            </div>
+                        </div>
+                        {/* Subject, Purpose, Campaign */}
+                        {[
+                            { label: 'SUBJECT', key: 'subject', items: LIB_SUBJECTS },
+                            { label: 'PURPOSE', key: 'purpose', items: LIB_PURPOSES },
+                            { label: 'CAMPAIGN', key: 'campaign', items: LIB_CAMPAIGNS },
+                            { label: 'STATUS', key: 'finalStatus', items: ['final', 'raw', 'intermediate'] },
+                        ].map(({ label, key, items }) => (
+                            <div key={key} style={{ padding: '8px 12px', borderBottom: '1px solid var(--lr-border)' }}>
+                                <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{label}</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                    {items.map(v => {
+                                        const isActive = (libFilters as Record<string, string>)[key] === v;
+                                        return <button key={v} onClick={() => setLibFilter(key, v)}
+                                            style={{ border: `1px solid ${isActive ? '#c9a84c' : 'var(--lr-border)'}`, borderRadius: 20, padding: '3px 8px', fontSize: '0.6rem', background: isActive ? 'rgba(201,168,76,0.15)' : 'rgba(255,255,255,0.04)', color: isActive ? '#c9a84c' : 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit' }}>{v}</button>;
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                        {/* Reset */}
+                        {Object.values(libFilters).some(v => v) && (
+                            <div style={{ padding: '10px 12px' }}>
+                                <button onClick={() => setLibFilters({ search: '', finalStatus: '', priority: '', subject: '', handZone: '', dsModel: '', purpose: '', campaign: '', shotType: '', colorLabel: '', mediaType: '', orientation: '' })}
+                                    style={{ width: '100%', padding: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, color: '#ef4444', fontSize: '0.65rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    ✕ Clear All Filters
+                                </button>
+                            </div>
+                        )}
+                    </aside>
+
+                    {/* Library main grid */}
+                    <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#0a0a0b' }}>
+                        <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--lr-border)', display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.7rem', color: 'var(--text-muted)', minHeight: 38 }}>
+                            {libLoading ? 'Loading…' : libNotIndexed
+                                ? '⚠ Not yet indexed — run pnpm ingest in the Media Indexer app'
+                                : `${libTotal.toLocaleString()} assets`}
+                            {libSelected.size > 0 && <span style={{ background: 'rgba(201,168,76,0.15)', border: '1px solid rgba(201,168,76,0.3)', color: '#c9a84c', borderRadius: 20, padding: '1px 8px', fontSize: '0.62rem' }}>{libSelected.size} selected</span>}
+                            {libSelected.size > 0 && <button style={{ marginLeft: 'auto', border: '1px solid var(--lr-border)', borderRadius: 6, background: 'transparent', color: 'var(--text-muted)', padding: '3px 8px', fontSize: '0.62rem', cursor: 'pointer' }} onClick={() => setLibSelected(new Set())}>Deselect All</button>}
+                        </div>
+                        <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8, alignContent: 'start' }}>
+                            {libAssets.map(asset => {
+                                const isSel = libSelected.has(asset.id);
+                                const thumb = libThumbUrl(asset);
+                                const keywords: string[] = (() => { try { return JSON.parse(asset.aiKeywords); } catch { return []; } })();
+                                return (
+                                    <div key={asset.id}
+                                        onClick={e => handleLibClick(asset, e)}
+                                        onDoubleClick={() => setLibDetail(asset)}
+                                        style={{ background: 'var(--lr-bg)', border: `1.5px solid ${isSel ? '#c9a84c' : 'rgba(255,255,255,0.06)'}`, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', transition: 'border-color 0.15s, transform 0.15s', userSelect: 'none', position: 'relative', boxShadow: isSel ? '0 0 0 1px #c9a84c' : 'none' }}
+                                    >
+                                        <div style={{ width: '100%', aspectRatio: '16/9', background: 'rgba(255,255,255,0.04)', position: 'relative', overflow: 'hidden' }}>
+                                            {thumb ? <img src={thumb} alt={asset.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" />
+                                                : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, opacity: 0.3 }}>{asset.mediaType === 'video' ? '🎬' : '🖼'}</div>}
+                                            {asset.mediaType === 'video' && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}><span style={{ fontSize: 20, opacity: 0.8 }}>▶</span></div>}
+                                            {asset.durationSeconds && <span style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: '0.58rem', fontWeight: 600, padding: '1px 4px', borderRadius: 3 }}>{libFmtDur(asset.durationSeconds)}</span>}
+                                            {asset.finalStatus === 'final' && <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(34,197,94,0.9)', color: '#fff', fontSize: '0.5rem', fontWeight: 700, padding: '1px 4px', borderRadius: 3, letterSpacing: '0.5px' }}>FINAL</span>}
+                                            {asset.priority === 'high' && <span style={{ position: 'absolute', top: 4, right: 4, width: 9, height: 9, borderRadius: '50%', background: asset.colorLabel ? LIB_COLORS[asset.colorLabel] || '#ef4444' : '#ef4444', border: '1.5px solid rgba(255,255,255,0.5)', display: 'block' }} />}
+                                            {isSel && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(201,168,76,0.2)', color: '#c9a84c', fontSize: 26, fontWeight: 700 }}>✓</div>}
+                                        </div>
+                                        <div style={{ padding: '6px 7px' }}>
+                                            <div style={{ fontSize: '0.62rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }} title={asset.fileName}>{asset.fileName}</div>
+                                            <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', marginBottom: 4 }}>{asset.aiDescription || '—'}</div>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                                                {asset.subject !== 'unknown' && <span style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 3, padding: '1px 4px', fontSize: '0.52rem', color: 'var(--text-muted)' }}>{asset.subject}</span>}
+                                                {asset.handZone && <span style={{ background: 'rgba(74,158,255,0.1)', border: '1px solid rgba(74,158,255,0.3)', borderRadius: 3, padding: '1px 4px', fontSize: '0.52rem', color: '#4a9eff' }}>{asset.handZone}</span>}
+                                                {asset.dsModel && <span style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: 3, padding: '1px 4px', fontSize: '0.52rem', color: '#c9a84c' }}>{asset.dsModel}</span>}
+                                                {keywords.slice(0, 1).map((k, i) => <span key={i} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 3, padding: '1px 4px', fontSize: '0.52rem', color: 'var(--text-muted)', opacity: 0.6 }}>{k}</span>)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {!libLoading && libAssets.length === 0 && !libNotIndexed && (
+                                <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '80px 20px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: 48, opacity: 0.3 }}>🎹</div>
+                                    <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-muted)' }}>No assets found</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', opacity: 0.6 }}>Try adjusting your filters</div>
+                                </div>
+                            )}
+                            {libNotIndexed && (
+                                <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '80px 20px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: 48 }}>⚙</div>
+                                    <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-muted)' }}>Catalog not found yet</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', opacity: 0.6, lineHeight: 1.8 }}>
+                                        The ingestion agent is building the catalog.<br />
+                                        Run: <code style={{ background: 'rgba(255,255,255,0.08)', padding: '2px 6px', borderRadius: 4 }}>pnpm ingest</code> in the Media Indexer app.
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </main>
+
+                    {/* Library export tray */}
+                    {libSelected.size > 0 && (
+                        <div style={{ position: 'fixed', bottom: 0, left: 240, right: 0, height: 60, background: 'var(--lr-bg)', borderTop: '1px solid rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', zIndex: 20 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontWeight: 600, color: '#c9a84c', fontSize: 14 }}>{libSelected.size} clips selected</span>
+                                {libTotalDur > 0 && <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>· {libFmtDur(libTotalDur)} total</span>}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button style={{ border: '1px solid var(--lr-border)', borderRadius: 6, background: 'transparent', color: 'var(--text-muted)', padding: '7px 12px', fontSize: '0.68rem', cursor: 'pointer' }} onClick={handleLibCopyPaths}>{libCopyMsg || '📋 Copy Paths'}</button>
+                                <button disabled={libExporting} onClick={() => handleLibExport('fcpxml')}
+                                    style={{ border: '1px solid var(--lr-border)', borderRadius: 6, background: 'rgba(255,255,255,0.06)', color: '#fff', padding: '7px 14px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}>
+                                    {libExporting ? '…' : '🎬 Export FCPXML'}
+                                </button>
+                                <button disabled={libExporting} onClick={() => handleLibExport('davinci')}
+                                    style={{ border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #c9a84c, #8a6a1e)', color: '#fff', padding: '7px 14px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}>
+                                    {libExporting ? '…' : '🎨 Export DaVinci XML'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Library detail modal */}
+                    {libDetail && (
+                        <div onClick={() => setLibDetail(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+                            <div onClick={e => e.stopPropagation()} style={{ background: '#111114', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, width: 520, maxHeight: '82vh', overflowY: 'auto', position: 'relative' }}>
+                                <button onClick={() => setLibDetail(null)} style={{ position: 'absolute', top: 12, right: 14, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 12 }}>✕</button>
+                                {libDetail.thumbPath && <img src={libThumbUrl(libDetail)} alt={libDetail.fileName} style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: '14px 14px 0 0', display: 'block' }} />}
+                                <div style={{ padding: 20 }}>
+                                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4, wordBreak: 'break-all' }}>{libDetail.fileName}</div>
+                                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginBottom: 10, wordBreak: 'break-all', fontFamily: 'monospace' }}>{libDetail.filePath}</div>
+                                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)', marginBottom: 14 }}>{libDetail.aiDescription}</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 14 }}>
+                                        {[['Status', libDetail.finalStatus], ['Priority', libDetail.priority], ['Subject', libDetail.subject], ['Hand Zone', libDetail.handZone ?? '—'], ['DS Model', libDetail.dsModel ?? '—'], ['Purpose', libDetail.purpose], ['Campaign', libDetail.campaign], ['Duration', libFmtDur(libDetail.durationSeconds)], ['Resolution', libDetail.width && libDetail.height ? `${libDetail.width}×${libDetail.height}` : '—'], ['File Size', libFmtBytes(libDetail.fileSize)], ['Color Grade', libDetail.colorGrade || '—'], ['Mood', libDetail.mood || '—']].map(([l, v]) => (
+                                            <div key={l} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 6, padding: '6px 9px', display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
+                                                <span style={{ color: 'var(--text-muted)' }}>{l}</span>
+                                                <span style={{ color: '#fff', fontWeight: 500 }}>{v}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button onClick={() => { navigator.clipboard.writeText(libDetail.filePath); setLibCopyMsg('Copied!'); setTimeout(() => setLibCopyMsg(''), 1500); }}
+                                        style={{ width: '100%', padding: 9, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '0.7rem' }}>
+                                        {libCopyMsg || '📋 Copy File Path'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── Generator panels (hidden when library is active) ── */}
+            <style>{`
+                .panels-row { display: ${activeTab === 'library' ? 'none' : 'flex'} !important; }
+                footer.output-strip-bar { display: ${activeTab === 'library' ? 'none' : ''} !important; }
+            `}</style>
         </div>
     );
 }
+
