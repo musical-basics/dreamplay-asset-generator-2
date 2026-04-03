@@ -177,7 +177,25 @@ export default function HomePage() {
     const [useNegativeGuard, setUseNegativeGuard] = useState(false);
 
     // ── Product spec configurator ───────────────────────────────
-    const [productSpecs, setProductSpecs] = useState<Record<string, string>>({});
+    const [productSpecs, setProductSpecs] = useState<Record<string, string>>({
+        angle: '3/4 view',
+        crop: 'Full product',
+        model: 'DS 6.0',
+        numKeys: '88 keys',
+        bodyColor: 'Black',
+        bodyMaterial: 'Gloss',
+        blackKeyColor: 'Black',
+        blackKeyMaterial: 'Gloss',
+        whiteKeyColor: 'Black',
+        whiteKeyMaterial: 'Gloss',
+        logoColor: 'White',
+        knobsColor: 'Black',
+        knobsMaterial: 'Metal',
+        dialColor: 'Black',
+        dialMaterial: 'Metal',
+        buttonsColor: 'Black',
+        buttonsMaterial: 'Premium rubber',
+    });
     const setSpec = (key: string, value: string) =>
         setProductSpecs(prev => prev[key] === value ? { ...prev, [key]: '' } : { ...prev, [key]: value });
     const buildSpecSuffix = () => {
