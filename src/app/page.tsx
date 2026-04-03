@@ -130,7 +130,7 @@ const POSITIVE_QUALITIES = [
 // ── Product Spec Configurator ──────────────────────────────────────────
 const PRODUCT_SPECS: { group: string; key: string; options: string[] }[] = [
     // Shot
-    { group: 'Angle', key: 'angle', options: ['3/4 view', 'Side profile', 'Top down', 'Front', 'Back'] },
+    { group: 'Camera angle', key: 'angle', options: ['3/4 view', 'Side profile', 'Top down', 'Front', 'Back'] },
     { group: 'Crop', key: 'crop', options: ['Close up', 'Full product', 'Wide', 'Far'] },
     // Piano
     { group: 'Model', key: 'model', options: ['DS 5.5', 'DS 6.0', 'DS 6.5'] },
@@ -198,8 +198,23 @@ export default function HomePage() {
     });
     const setSpec = (key: string, value: string) =>
         setProductSpecs(prev => prev[key] === value ? { ...prev, [key]: '' } : { ...prev, [key]: value });
+
+    // Expand ambiguous labels into precise prompt directives for Gemini
+    const SPEC_EXPANSIONS: Record<string, string> = {
+        '3/4 view': 'Three-quarter angle — camera at 45° to the front-left of the product, showing the full front face and left side panel simultaneously (standard hero product shot)',
+        'Side profile': 'Pure side profile — camera perfectly perpendicular to the left side, only the side panel visible',
+        'Top down': 'Flat lay / top-down — camera directly overhead looking straight down at the product',
+        'Front': 'Straight-on front view — camera centered directly in front, perfectly symmetrical, front face only',
+        'Back': 'Rear view — camera directly behind showing the back panel only',
+        'Close up': 'Tight close-up — frame only a specific detail or section, high magnification',
+        'Full product': 'Full product shot — the entire instrument fits within the frame with breathing room',
+        'Wide': 'Wide shot — product occupies ~55% of frame, environment and background visible',
+        'Far': 'Distant / environmental — product is small in frame, wide environment dominates',
+    };
     const buildSpecSuffix = () => {
-        const lines = PRODUCT_SPECS.filter(s => productSpecs[s.key]).map(s => `${s.group}: ${productSpecs[s.key]}`);
+        const lines = PRODUCT_SPECS
+            .filter(s => productSpecs[s.key])
+            .map(s => `${s.group}: ${SPEC_EXPANSIONS[productSpecs[s.key]] ?? productSpecs[s.key]}`);
         return lines.length ? `\n\nPRODUCT SPECS (follow strictly):\n${lines.join('\n')}` : '';
     };
 
