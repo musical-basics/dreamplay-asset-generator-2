@@ -178,7 +178,7 @@ export default function HomePage() {
 
     // Expand ambiguous labels into precise prompt directives for Gemini
     const SPEC_EXPANSIONS: Record<string, string> = {
-        // Camera
+        // Camera angle
         'Retain from ref': 'match camera angle and perspective exactly from reference — do not change viewpoint',
         '3/4 view': '3/4 angle — 45° front-left, shows full front face and left side panel',
         'Side profile': 'pure side view — camera perpendicular to left side only',
@@ -190,16 +190,73 @@ export default function HomePage() {
         'Full product': 'full product in frame with breathing room',
         'Wide': 'wide shot — product at ~55% of frame, environment visible',
         'Far': 'environmental shot — product small in frame, wide scene dominates',
-        // Background
+        // Background style
         'Drop shadow': 'studio backdrop with soft natural drop shadow below product, clean seamless surface',
         'Reflective': 'polished reflective floor — piano reflects symmetrically below',
         'High-end product lighting pop': 'dramatic studio: volumetric light rays, rim glow, cinematic atmosphere',
+        // ── Color/material overrides ── these MUST override reference image defaults ──
+        // Body color
+        'Black': 'SOLID BLACK — not dark grey, not charcoal, not brown. Pure matte/gloss black surface.',
+        'White': 'PURE WHITE — bright white surface, not off-white or cream.',
+        'Gold': 'METALLIC GOLD — shiny polished gold finish, not yellow, not brass.',
+        // Body material
+        'Matte': 'MATTE finish — completely flat, no specular highlights, no gloss.',
+        'Gloss': 'HIGH-GLOSS finish — mirror-like sheen with strong specular reflections.',
+        // White key color (strongest override needed — fights training prior strongly)
+        'White keys → Black': 'OVERRIDE: ALL piano keys that would normally be white/ivory MUST be rendered SOLID MATTE BLACK. No ivory. No cream. No grey. Pure black, same shade as the black keys. This is not optional.',
+        'White keys → White': 'OVERRIDE: ALL natural piano keys are bright white/ivory — standard piano key color.',
+        'White keys → Gold': 'OVERRIDE: ALL natural piano keys are METALLIC GOLD finish — shiny gold, not ivory.',
+        // Black key color
+        'Black keys → Black': 'OVERRIDE: All short raised piano keys are solid matte black.',
+        'Black keys → White': 'OVERRIDE: All short raised piano keys are solid bright white — not the usual dark color.',
+        'Black keys → Gold': 'OVERRIDE: All short raised piano keys are metallic gold finish.',
+        // Background color
+        'BG Black': 'OVERRIDE: Background is PURE BLACK (#000000) — solid dark studio void, no white or grey elements.',
+        'BG White': 'OVERRIDE: Background is PURE WHITE — clean bright white studio backdrop, seamless.',
+        'BG Gold': 'OVERRIDE: Background has warm gold/amber tones.',
+        // Logo color
+        'Logo White': 'Logo is WHITE — light logo on dark background.',
+        'Logo Black': 'Logo is BLACK — dark logo on light background.',
+        'Logo Gold': 'Logo is METALLIC GOLD.',
+        // Knobs / dial / buttons colors
+        'Metal': 'METALLIC finish — brushed or polished metal surface, shiny.',
+        'Plastic': 'HARD PLASTIC finish — smooth non-metallic surface.',
+        'Premium rubber': 'PREMIUM MATTE RUBBER — soft-touch, slightly textured matte surface.',
     };
+
+    // Maps spec group+value pairs to the right expansion key
+    const getExpansion = (group: string, val: string): string => {
+        // Special-case color specs that need group context to pick the right expansion
+        if (group === 'White Key Color') {
+            if (val === 'Black') return SPEC_EXPANSIONS['White keys → Black'];
+            if (val === 'White') return SPEC_EXPANSIONS['White keys → White'];
+            if (val === 'Gold')  return SPEC_EXPANSIONS['White keys → Gold'];
+        }
+        if (group === 'Black Key Color') {
+            if (val === 'Black') return SPEC_EXPANSIONS['Black keys → Black'];
+            if (val === 'White') return SPEC_EXPANSIONS['Black keys → White'];
+            if (val === 'Gold')  return SPEC_EXPANSIONS['Black keys → Gold'];
+        }
+        if (group === 'Background Color') {
+            if (val === 'Black') return SPEC_EXPANSIONS['BG Black'];
+            if (val === 'White') return SPEC_EXPANSIONS['BG White'];
+            if (val === 'Gold')  return SPEC_EXPANSIONS['BG Gold'];
+        }
+        if (group === 'Logo Color') {
+            if (val === 'White') return SPEC_EXPANSIONS['Logo White'];
+            if (val === 'Black') return SPEC_EXPANSIONS['Logo Black'];
+            if (val === 'Gold')  return SPEC_EXPANSIONS['Logo Gold'];
+        }
+        return SPEC_EXPANSIONS[val] ?? val;
+    };
+
     const buildSpecSuffix = () => {
         const lines = PRODUCT_SPECS
             .filter(s => productSpecs[s.key])
-            .map(s => `${s.group}: ${SPEC_EXPANSIONS[productSpecs[s.key]] ?? productSpecs[s.key]}`);
-        return lines.length ? `\n\n[SPECS — follow strictly]\n${lines.join('\n')}` : '';
+            .map(s => `${s.group}: ${getExpansion(s.group, productSpecs[s.key])}`);
+        return lines.length
+            ? `\n\n[OVERRIDE SPECS — these take absolute priority over the reference image defaults. Apply exactly:]\n${lines.join('\n')}`
+            : '';
     };
 
     // Hydrate from localStorage after first mount (avoids SSR hydration mismatch)
