@@ -15,13 +15,16 @@ import { getGoogleAI } from '@/lib/google-ai';
  */
 export async function POST(req: NextRequest) {
     try {
-        const { imageBase64, imageMimeType, description } = await req.json();
+        const { imageBase64, imageMimeType, description, modelId } = await req.json();
 
         if (!imageBase64 || !description) {
             return NextResponse.json({ error: 'Missing imageBase64 or description' }, { status: 400 });
         }
 
         const ai = getGoogleAI();
+
+        // Use text-capable Gemini model — prefer what the user has selected, fallback to flash
+        const textModel = (modelId && modelId.startsWith('gemini-')) ? modelId : 'gemini-2.5-flash-image';
 
         const detectPrompt =
             `Analyze this image and find the bounding box of: "${description}".\n\n` +
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest) {
             `Be precise. Only return the JSON object.`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: textModel,
             contents: [{
                 role: 'user',
                 parts: [

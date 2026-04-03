@@ -166,7 +166,7 @@ export default function MaskEditor({ imageBase64, imageMimeType, modelId, format
             const res = await fetch('/api/magic-select', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageBase64, imageMimeType, description: magicDesc }),
+                body: JSON.stringify({ imageBase64, imageMimeType, description: magicDesc, modelId }),
             });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
