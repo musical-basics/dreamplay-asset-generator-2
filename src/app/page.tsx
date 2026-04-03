@@ -531,14 +531,42 @@ export default function HomePage() {
 
     // ─── Saved outputs ───────────────────────────────────────────────────────
     const [savedOutputs, setSavedOutputs] = useState<Record<string, SavedOutput[]>>({});
-    const [showOutputs, setShowOutputs] = useState(false);
+    const [showOutputs, setShowOutputs] = useState(true);  // auto-expanded
     const [selectedOutput, setSelectedOutput] = useState<SavedOutput | null>(null);
 
     const loadSavedOutputs = useCallback(async () => {
         try {
             const res = await fetch('/api/save-generation');
             const data = await res.json();
-            if (data.dates) setSavedOutputs(data.dates as Record<string, SavedOutput[]>);
+            if (data.dates) {
+                const dates = data.dates as Record<string, SavedOutput[]>;
+                setSavedOutputs(dates);
+
+                // Restore disk generations into filmstrip as done jobs
+                const diskJobs: GenerationJob[] = [];
+                for (const dayItems of Object.values(dates)) {
+                    for (const out of dayItems) {
+                        diskJobs.push({
+                            id: out.jobId || out.fileName,
+                            batchId: `b-disk-${out.date}`,
+                            formatId: out.formatLabel || 'saved',
+                            formatLabel: out.formatLabel || 'Saved',
+                            modelId: out.modelId || 'unknown',
+                            modelName: out.modelName || 'Saved',
+                            status: 'done',
+                            resultUrl: out.path,   // public URL — works directly in <img>
+                            prompt: out.prompt || '',
+                            createdAt: out.createdAt || 0,
+                        });
+                    }
+                }
+                // Merge: keep in-session jobs (higher fidelity) and add disk jobs not already present
+                setJobs(prev => {
+                    const existingIds = new Set(prev.map(j => j.id));
+                    const toAdd = diskJobs.filter(j => !existingIds.has(j.id));
+                    return toAdd.length ? [...prev, ...toAdd] : prev;
+                });
+            }
         } catch { /* ignore */ }
     }, []);
 
