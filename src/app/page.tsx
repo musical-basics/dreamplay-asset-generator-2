@@ -88,15 +88,25 @@ export default function HomePage() {
     // ─── Core state ───────────────────────────────────────────────────────────────
 
     const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set());
-    const [selectedModel, setSelectedModel] = useState<string>(() => typeof window !== 'undefined' ? (localStorage.getItem('dp_model') || 'gemini-flash-image') : 'gemini-flash-image');
-    const [prompt, setPrompt] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('dp_prompt') || '') : '');
-    const [enhancedPrompt, setEnhancedPrompt] = useState(() => typeof window !== 'undefined' ? (localStorage.getItem('dp_enhanced_prompt') || '') : '');
+    const [selectedModel, setSelectedModel] = useState<string>('gemini-flash-image');
+    const [prompt, setPrompt] = useState('');
+    const [enhancedPrompt, setEnhancedPrompt] = useState('');
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [brandTags, setBrandTags] = useState<string[]>(DEFAULT_BRAND_CONFIG.styleWords);
     const [activeBrandTags, setActiveBrandTags] = useState<Set<string>>(new Set(DEFAULT_BRAND_CONFIG.styleWords));
-    const [useBrandStyle, setUseBrandStyle] = useState<boolean>(() =>
-        typeof window !== 'undefined' ? localStorage.getItem('dp_brand_style') !== 'off' : true
-    );
+    const [useBrandStyle, setUseBrandStyle] = useState<boolean>(true);
+    // ─── Restore persisted state after mount (avoids SSR hydration mismatch) ─────
+    useEffect(() => {
+        setSelectedModel(localStorage.getItem('dp_model') || 'gemini-flash-image');
+        setPrompt(localStorage.getItem('dp_prompt') || '');
+        setEnhancedPrompt(localStorage.getItem('dp_enhanced_prompt') || '');
+        setUseBrandStyle(localStorage.getItem('dp_brand_style') !== 'off');
+        try {
+            const storedJobs = JSON.parse(sessionStorage.getItem('dp_jobs') || '[]');
+            if (storedJobs.length) setJobs(storedJobs);
+        } catch { }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     useEffect(() => { localStorage.setItem('dp_brand_style', useBrandStyle ? 'on' : 'off'); }, [useBrandStyle]);
 
     // Brand suffix — only computed when on
@@ -244,10 +254,7 @@ export default function HomePage() {
     const [filterLabel, setFilterLabel] = useState<LabelColor | 'all'>('all');
 
     // ─── Jobs (persisted to sessionStorage so clicks don't lose outputs) ──────
-    const [jobs, setJobs] = useState<GenerationJob[]>(() => {
-        if (typeof window === 'undefined') return [];
-        try { return JSON.parse(sessionStorage.getItem('dp_jobs') || '[]'); } catch { return []; }
-    });
+    const [jobs, setJobs] = useState<GenerationJob[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
     useEffect(() => { sessionStorage.setItem('dp_jobs', JSON.stringify(jobs)); }, [jobs]);
 
