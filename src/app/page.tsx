@@ -104,6 +104,32 @@ const POSITIVE_QUALITIES = [
     'Material textures', 'Water / surface reflections', 'Cinematic depth of field', 'Other',
 ];
 
+// ── Product Spec Configurator ──────────────────────────────────────────
+const PRODUCT_SPECS: { group: string; key: string; options: string[] }[] = [
+    // Shot
+    { group: 'Angle', key: 'angle', options: ['3/4 view', 'Side profile', 'Top down', 'Front', 'Back'] },
+    { group: 'Crop', key: 'crop', options: ['Close up', 'Full product', 'Wide', 'Far'] },
+    // Piano
+    { group: 'Model', key: 'model', options: ['DS 5.5', 'DS 6.0', 'DS 6.5'] },
+    { group: 'Keys', key: 'numKeys', options: ['61 keys', '76 keys', '88 keys'] },
+    { group: 'Body color', key: 'bodyColor', options: ['Black', 'White', 'Gold'] },
+    { group: 'Body material', key: 'bodyMaterial', options: ['Matte', 'Gloss'] },
+    // Black keys
+    { group: 'Black key color', key: 'blackKeyColor', options: ['Black', 'White', 'Gold'] },
+    { group: 'Black key material', key: 'blackKeyMaterial', options: ['Gloss', 'Matte'] },
+    // White keys
+    { group: 'White key color', key: 'whiteKeyColor', options: ['White', 'Black', 'Gold'] },
+    { group: 'White key material', key: 'whiteKeyMaterial', options: ['Gloss', 'Matte'] },
+    // Components
+    { group: 'Logo color', key: 'logoColor', options: ['White', 'Black', 'Gold'] },
+    { group: 'Knobs color', key: 'knobsColor', options: ['Black', 'White', 'Gold'] },
+    { group: 'Knobs material', key: 'knobsMaterial', options: ['Metal', 'Plastic'] },
+    { group: 'Center dial color', key: 'dialColor', options: ['Black', 'White', 'Gold'] },
+    { group: 'Center dial material', key: 'dialMaterial', options: ['Metal', 'Premium rubber'] },
+    { group: 'Buttons color', key: 'buttonsColor', options: ['Black', 'White', 'Gold'] },
+    { group: 'Buttons material', key: 'buttonsMaterial', options: ['Metal', 'Premium rubber'] },
+];
+
 // ─── Thumbnail helper ─────────────────────────────────────────────────────────
 // Routes product images through /api/thumb which caches resized WebP permanently.
 // After first generation the browser never re-requests this URL (immutable header).
@@ -126,6 +152,15 @@ export default function HomePage() {
     // ── Prompt preset toggles ───────────────────────────────────
     const [useStarterPreset, setUseStarterPreset] = useState(false);
     const [useNegativeGuard, setUseNegativeGuard] = useState(false);
+
+    // ── Product spec configurator ───────────────────────────────
+    const [productSpecs, setProductSpecs] = useState<Record<string, string>>({});
+    const setSpec = (key: string, value: string) =>
+        setProductSpecs(prev => prev[key] === value ? { ...prev, [key]: '' } : { ...prev, [key]: value });
+    const buildSpecSuffix = () => {
+        const lines = PRODUCT_SPECS.filter(s => productSpecs[s.key]).map(s => `${s.group}: ${productSpecs[s.key]}`);
+        return lines.length ? `\n\nPRODUCT SPECS (follow strictly):\n${lines.join('\n')}` : '';
+    };
 
     // Hydrate from localStorage after first mount (avoids SSR hydration mismatch)
     useEffect(() => {
@@ -689,7 +724,8 @@ export default function HomePage() {
             useStarterPreset ? PRESET_DS60_STARTER : '',
             useNegativeGuard ? PRESET_NEGATIVE_GUARD : '',
         ].filter(Boolean).join('\n\n');
-        const activePrompt = presetPrefix ? `${presetPrefix}\n\n${basePrompt}` : basePrompt;
+        const specSuffix = buildSpecSuffix();
+        const activePrompt = (presetPrefix ? `${presetPrefix}\n\n${basePrompt}` : basePrompt) + specSuffix;
         const refImagePaths = selectedRefPaths.slice();
 
         // ── Save to history ──────────────────────────────────────────────────────
@@ -1397,6 +1433,45 @@ export default function HomePage() {
                                             </div>
                                         );
                                     })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Product Specs */}
+                        <div className="lr-section">
+                            <button className="lr-section-toggle" onClick={() => toggleRightSection('specs')}>
+                                <span className="lr-section-label">
+                                    Product Specs
+                                    {Object.values(productSpecs).some(Boolean) && (
+                                        <span style={{ marginLeft: '0.35rem', fontSize: '0.58rem', color: 'var(--accent)', fontWeight: 700 }}>
+                                            ● {Object.values(productSpecs).filter(Boolean).length}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className={`lr-chevron${rightSections.has('specs') ? ' open' : ''}`}>▲</span>
+                            </button>
+                            {rightSections.has('specs') && (
+                                <div className="lr-section-body" style={{ paddingBottom: '0.25rem' }}>
+                                    {Object.values(productSpecs).some(Boolean) && (
+                                        <button className="brand-tag" style={{ opacity: 0.5, marginBottom: '0.4rem' }}
+                                            onClick={() => setProductSpecs({})}>✕ Clear all specs</button>
+                                    )}
+                                    {PRODUCT_SPECS.map(spec => (
+                                        <div key={spec.key} style={{ marginBottom: '0.35rem' }}>
+                                            <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.2rem' }}>
+                                                {spec.group}
+                                            </div>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                                                {spec.options.map(opt => (
+                                                    <button
+                                                        key={opt}
+                                                        className={`brand-tag${productSpecs[spec.key] === opt ? ' active' : ''}`}
+                                                        onClick={() => setSpec(spec.key, opt)}
+                                                    >{opt}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
