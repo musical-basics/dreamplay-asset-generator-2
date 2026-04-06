@@ -541,6 +541,7 @@ export default function HomePage() {
     // ─── View state ───────────────────────────────────────────────────────────────
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+    const [lbJob, setLbJob] = useState<GenerationJob | null>(null); // filmstrip lightbox
     const [activeStrip, setActiveStrip] = useState<string | null>(null);
     const [maskEditorJob, setMaskEditorJob] = useState<GenerationJob | null>(null);
     const [thumbSize, setThumbSize] = useState(90); // px for grid columns
@@ -1064,9 +1065,17 @@ export default function HomePage() {
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
             // ESC — exit all preview modes
             if (e.key === 'Escape') {
+                if (lbJob) { setLbJob(null); return; }
                 if (lightboxSrc) { setLightboxSrc(null); return; }
                 if (activeStrip) { setActiveStrip(null); return; }
                 if (previewImage) { setPreviewImage(null); return; }
+            }
+            // Filmstrip lightbox: arrow key navigation
+            if (lbJob) {
+                const doneJobs = jobs.filter(j => j.status === 'done' && j.resultUrl && j.batchId === lbJob.batchId);
+                const idx = doneJobs.findIndex(j => j.id === lbJob.id);
+                if (e.key === 'ArrowLeft' && idx > 0) { e.preventDefault(); setLbJob(doneJobs[idx - 1]); return; }
+                if (e.key === 'ArrowRight' && idx < doneJobs.length - 1) { e.preventDefault(); setLbJob(doneJobs[idx + 1]); return; }
             }
             if (!selectedGridImage) return;
             const n = Number(e.key);
@@ -1084,7 +1093,7 @@ export default function HomePage() {
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [selectedGridImage, imageMeta, activeStrip, previewImage, lightboxSrc]);
+    }, [selectedGridImage, imageMeta, activeStrip, previewImage, lightboxSrc, lbJob]);
 
     // ─── Render helpers ───────────────────────────────────────────────────────────
     const selectedImageMeta = selectedGridImage ? getMeta(selectedGridImage) : null;
@@ -2053,7 +2062,9 @@ export default function HomePage() {
                             <div className="strip-batch-items">
                                 {batch.jobs.map(job => (
                                     <div key={job.id} className={`strip-item${activeStrip === job.id ? ' active' : ''}`}
-                                        onClick={() => { setActiveStrip(job.id); setPreviewImage(null); }}>
+                                        onClick={() => { setActiveStrip(job.id); setPreviewImage(null); }}
+                                        onDoubleClick={() => job.status === 'done' && job.resultUrl && setLbJob(job)}
+                                        title={job.status === 'done' ? 'Double-click to preview fullscreen' : undefined}>
                                         {job.status === 'done' && job.resultUrl ? (
                                             <img src={job.resultUrl} alt={job.formatName} loading="lazy" />
                                         ) : (
@@ -2215,6 +2226,100 @@ export default function HomePage() {
                 <div style={{ fontSize: '0.62rem', opacity: 0.35, marginTop: '0.4rem' }}>Esc or click outside to close</div>
             </div>
         )}
+        {/* ── FILMSTRIP LIGHTBOX ── */}
+        {lbJob && lbJob.resultUrl && (() => {
+            const doneJobs = jobs.filter(j => j.status === 'done' && j.resultUrl && j.batchId === lbJob.batchId);
+            const idx = doneJobs.findIndex(j => j.id === lbJob.id);
+            const hasPrev = idx > 0;
+            const hasNext = idx < doneJobs.length - 1;
+            const navigate = (dir: -1 | 1) => {
+                const next = doneJobs[idx + dir];
+                if (next) setLbJob(next);
+            };
+            const deleteJob = () => {
+                setJobs(prev => prev.filter(j => j.id !== lbJob.id));
+                const next = doneJobs[idx + 1] ?? doneJobs[idx - 1];
+                if (next) setLbJob(next); else setLbJob(null);
+            };
+            const reorder = (dir: -1 | 1) => {
+                setJobs(prev => {
+                    const arr = [...prev];
+                    const i = arr.findIndex(j => j.id === lbJob.id);
+                    const target = arr.findIndex(j => j.id === (doneJobs[idx + dir]?.id));
+                    if (i < 0 || target < 0) return arr;
+                    [arr[i], arr[target]] = [arr[target], arr[i]];
+                    return arr;
+                });
+            };
+            return (
+                <div
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 9998,
+                        background: 'rgba(0,0,0,0.94)',
+                        display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center',
+                        backdropFilter: 'blur(8px)',
+                    }}
+                    onClick={() => setLbJob(null)}
+                >
+                    {/* Header */}
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0,
+                        display: 'flex', alignItems: 'center', gap: '0.6rem',
+                        padding: '0.6rem 1rem',
+                        background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
+                        borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    }} onClick={e => e.stopPropagation()}>
+                        <button style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 8px' }} onClick={() => setLbJob(null)}>✕ Close</button>
+                        <span style={{ fontSize: '0.7rem', opacity: 0.8, fontWeight: 600 }}>{lbJob.formatLabel}</span>
+                        <span style={{ fontSize: '0.62rem', opacity: 0.45 }}>{lbJob.modelId} · {idx + 1}/{doneJobs.length}</span>
+                        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                            {/* Reorder */}
+                            <button onClick={() => reorder(-1)} disabled={!hasPrev} title="Move left in filmstrip"
+                                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, color: hasPrev ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.2)', cursor: hasPrev ? 'pointer' : 'default', fontSize: '0.65rem', padding: '3px 9px' }}>
+                                ← Move
+                            </button>
+                            <button onClick={() => reorder(1)} disabled={!hasNext} title="Move right in filmstrip"
+                                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, color: hasNext ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.2)', cursor: hasNext ? 'pointer' : 'default', fontSize: '0.65rem', padding: '3px 9px' }}>
+                                Move →
+                            </button>
+                            {/* Mask & Fix */}
+                            <button onClick={() => { setMaskEditorJob(lbJob); setLbJob(null); }}
+                                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: '0.65rem', padding: '3px 10px' }}>
+                                🎭 Mask &amp; Fix
+                            </button>
+                            {/* Delete */}
+                            <button onClick={deleteJob}
+                                style={{ background: 'rgba(255,69,58,0.15)', border: '1px solid rgba(255,69,58,0.35)', borderRadius: 4, color: '#ff453a', cursor: 'pointer', fontSize: '0.65rem', padding: '3px 10px', fontWeight: 600 }}>
+                                🗑 Delete
+                            </button>
+                            {/* Download */}
+                            <a href={lbJob.resultUrl} download={`${lbJob.formatLabel}.png`}
+                                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, color: 'rgba(255,255,255,0.75)', fontSize: '0.65rem', padding: '3px 10px', textDecoration: 'none' }}>
+                                ↓ Save
+                            </a>
+                        </div>
+                    </div>
+                    {/* Prev / Next arrows */}
+                    {hasPrev && (
+                        <button onClick={e => { e.stopPropagation(); navigate(-1); }}
+                            style={{ position: 'absolute', left: '1rem', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}>‹</button>
+                    )}
+                    {hasNext && (
+                        <button onClick={e => { e.stopPropagation(); navigate(1); }}
+                            style={{ position: 'absolute', right: '1rem', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}>›</button>
+                    )}
+                    {/* Image */}
+                    <img
+                        src={lbJob.resultUrl}
+                        alt={lbJob.formatLabel}
+                        style={{ maxWidth: 'calc(100vw - 120px)', maxHeight: 'calc(100vh - 120px)', objectFit: 'contain', borderRadius: 6, boxShadow: '0 8px 80px rgba(0,0,0,0.9)', marginTop: '52px' }}
+                        onClick={e => e.stopPropagation()}
+                    />
+                    <div style={{ fontSize: '0.58rem', opacity: 0.3, marginTop: '0.5rem' }}>Esc or click outside to close · ← → to navigate</div>
+                </div>
+            );
+        })()}
         {/* ── MASK EDITOR MODAL ── */}
         {maskEditorJob && maskEditorJob.resultUrl && (() => {
             // Extract raw base64 from the data URL
