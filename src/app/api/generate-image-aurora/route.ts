@@ -73,10 +73,10 @@ export async function POST(req: NextRequest) {
                 'Authorization': `Bearer ${XAI_API_KEY}`,
             },
             body: JSON.stringify({
-                model: 'aurora',
+                model: 'grok-imagine-image',
                 prompt: fullPrompt,
                 n: 1,
-                response_format: 'b64_json',
+                response_format: 'url',
             }),
         });
 

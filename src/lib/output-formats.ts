@@ -450,15 +450,15 @@ export const MODEL_OPTIONS: ModelOption[] = [
     },
     {
         id: 'xai-aurora',
-        name: 'xAI Aurora ✦ Grok',
+        name: 'Grok Imagine ✦ xAI',
         provider: 'xai',
         type: 'image',
         tier: 'free',
         quality: 'balanced',
-        description: 'xAI\'s Aurora image generation model. Strong photorealism and creative composition. Uses your xAI API key. Good alternative to Gemini for lifestyle and talent shots.',
+        description: 'xAI\'s Grok Imagine image generation model. Strong photorealism and creative composition. Uses your xAI API key. Good alternative to Gemini for lifestyle and talent shots.',
         bestFor: ['Lifestyle shots', 'Talent scenes', 'Creative compositions', 'Variety'],
         creditCost: 'xAI API key required',
-        apiModel: 'aurora',
+        apiModel: 'grok-imagine-image',
     },
 ];
 

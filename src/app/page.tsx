@@ -467,7 +467,7 @@ export default function HomePage() {
                     let res: Response;
                     try {
                         res = await fetch(
-                                newJob.modelId === 'xai-aurora'
+                                MODEL_OPTIONS.find(m => m.apiModel === newJob.modelId)?.provider === 'xai'
                                     ? '/api/generate-image-aurora'
                                     : '/api/generate-image',
                                 {
