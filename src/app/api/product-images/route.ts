@@ -17,9 +17,10 @@ function walkDir(dir: string, baseDir: string) {
       const ext = path.extname(entry.name);
       const isImage = IMAGE_EXTS.has(ext), isVideo = VIDEO_EXTS.has(ext);
       if (isImage || isVideo) {
-        const rel = full.replace(baseDir, '').replace(/\\/g, '/');
-        out.push({ absPath: full, relPath: '/product-images' + rel, name: entry.name,
-          folder: path.dirname(rel).replace(/^\//, '') || 'Root', type: isVideo ? 'video' : 'image' });
+        // Store a pure relative path (no leading slash, no hardcoded prefix)
+        const rel = full.replace(baseDir, '').replace(/\\/g, '/').replace(/^\//, '');
+        const folder = path.dirname(rel) || 'Root';
+        out.push({ absPath: full, relPath: rel, name: entry.name, folder, type: isVideo ? 'video' : 'image' });
       }
     }
   }
@@ -27,15 +28,28 @@ function walkDir(dir: string, baseDir: string) {
   return out;
 }
 
+// ── Source directory: env var or fallback to public/product-images ──────────
+const PRODUCT_DIR = process.env.PRODUCT_IMAGES_DIR
+  || path.join(process.cwd(), 'public', 'product-images');
+
+// Whether the dir is inside public/ (static serving) or external (needs /api/thumb)
+const IS_PUBLIC_DIR = PRODUCT_DIR.startsWith(path.join(process.cwd(), 'public'));
+
+function imageRelPath(absPath: string): string {
+  const rel = absPath.replace(PRODUCT_DIR, '').replace(/\\/g, '/');
+  if (IS_PUBLIC_DIR) return '/product-images' + rel;
+  // External path: route through thumb API for serving
+  return '/api/thumb?path=' + encodeURIComponent(rel) + '&source=external';
+}
+
 function autoSeed() {
-  const publicDir = path.join(process.cwd(), 'public', 'product-images');
-  for (const f of walkDir(publicDir, publicDir)) {
+  for (const f of walkDir(PRODUCT_DIR, PRODUCT_DIR)) {
     try {
       const stat = fs.statSync(f.absPath);
       const mtime = Math.floor(stat.mtimeMs);
-      // Skip files that haven't changed — makes this fast on subsequent calls
-      if (getMtime(f.relPath) === mtime) continue;
-      upsertImage({ filePath: f.relPath, name: f.name, folder: f.folder, type: f.type,
+      if (getMtime(f.absPath) === mtime) continue;
+      // Store absPath as the key; serve via imageRelPath
+      upsertImage({ filePath: imageRelPath(f.absPath), name: f.name, folder: f.folder, type: f.type,
         mtime, size: stat.size });
     } catch { /* skip unreadable files */ }
   }
@@ -43,7 +57,7 @@ function autoSeed() {
 
 export async function GET() {
   try {
-    autoSeed(); // always run — skips unchanged files via mtime, picks up new folders instantly
+    autoSeed();
     const result = queryGrouped();
     return NextResponse.json(result);
   } catch (err: unknown) {
@@ -58,9 +72,8 @@ export async function DELETE(req: Request) {
     const filePath = url.searchParams.get('path');
     if (!filePath) return NextResponse.json({ error: 'Missing path' }, { status: 400 });
 
-    const publicImagesDir = path.resolve(process.cwd(), 'public', 'product-images');
-    const absolutePath = path.resolve(process.cwd(), 'public', filePath.replace(/^\//, ''));
-    if (!absolutePath.startsWith(publicImagesDir))
+    const absolutePath = path.resolve(PRODUCT_DIR, filePath.replace(/^\//, ''));
+    if (!absolutePath.startsWith(PRODUCT_DIR))
       return NextResponse.json({ error: 'Invalid path' }, { status: 403 });
     if (!fs.existsSync(absolutePath))
       return NextResponse.json({ error: 'File not found' }, { status: 404 });

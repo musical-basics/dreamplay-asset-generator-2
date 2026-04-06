@@ -21,15 +21,28 @@ function cacheKey(urlPath: string, w: number): string {
 
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
-    const urlPath = searchParams.get('path');   // e.g. /product-images/folder/img.jpg
+    const urlPath = searchParams.get('path');   // relative path
+    const source = searchParams.get('source');  // 'external' = PRODUCT_IMAGES_DIR
     const w = parseInt(searchParams.get('w') || String(THUMB_W), 10);
 
     if (!urlPath) {
         return NextResponse.json({ error: 'Missing path' }, { status: 400 });
     }
 
-    // Security: only serve files inside public/
-    const fsPath = path.join(process.cwd(), 'public', decodeURIComponent(urlPath));
+    let fsPath: string;
+    if (source === 'external' && process.env.PRODUCT_IMAGES_DIR) {
+        // Serve from the external local drive folder
+        const base = process.env.PRODUCT_IMAGES_DIR;
+        fsPath = path.join(base, decodeURIComponent(urlPath));
+        // Security: must stay inside PRODUCT_IMAGES_DIR
+        if (!fsPath.startsWith(base)) {
+            return new NextResponse(null, { status: 403 });
+        }
+    } else {
+        // Default: serve from public/
+        fsPath = path.join(process.cwd(), 'public', decodeURIComponent(urlPath));
+    }
+
     if (!existsSync(fsPath)) {
         return new NextResponse(null, { status: 404 });
     }
