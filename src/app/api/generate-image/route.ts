@@ -58,9 +58,15 @@ const DS60_MASTER_CONSTRAINT = `
 
 === DS 6.0 REFERENCE RULES — THE FIRST IMAGES ARE GROUND TRUTH ===
 
+★ PRIORITY #1 — TEXT & LOGO ACCURACY (NON-NEGOTIABLE):
+- The brand name is "DreamPlay" — spelled exactly: capital D, lowercase r-e-a-m, capital P, lowercase l-a-y. Never "Dream Play", "Dreamplay", "DREAMPlay", or any other variation.
+- Logo = circular yin-yang emblem + "Dream" (bold italic serif) + "Play" (outline stroke, never filled-in/solid). Both words must be legible and correctly spelled. Treat the logo as pixel-accurate — copy it exactly from the reference image.
+- NO extra text, taglines, serial numbers, or model numbers may appear anywhere unless explicitly in the user prompt. Text hallucination is the WORST failure mode.
+- White logo on dark backgrounds, black logo on light backgrounds. Never invert this.
+- Logo is centered above the key bed on the control panel — do not reposition it.
+
 - CAMERA ANGLE: Match the exact camera angle and perspective from the reference image by default. Only change angle if explicitly instructed in the SPECS below. Do not default to a straight front-on view if the reference shows an angled or 3/4 shot.
 - KEYBOARD: 88 keys. Black keys only in groups of 2 or 3, strictly alternating (2-gap-3-gap pattern across full width). Never equal spacing. Never 4+ in one cluster.
-- LOGO: Circular yin-yang emblem + "Dream" (bold italic) + "Play" (outline stroke, never filled-in). Centered above keys. White logo on dark BG, black logo on light. Copy from reference exactly — no taglines, no resizing.
 - KNOBS: Exactly 2. Round flat-top rubber knobs. Same size, small gap. Top-left of control panel only.
 - LCD: 1 rectangular screen (approx 1/6 panel width). Match reference size and position. No added text or graphics.
 - CENTER DIAL: Large rotary with alternating rubber arc segments and metallic accent band. Match reference image colors — do not add gold if not shown in reference.
