@@ -13,6 +13,24 @@ function resolveModelId(id: string): string {
     return found?.apiModel ?? id;
 }
 
+// ─── Auto-retry on 429 rate limit ─────────────────────────────────────────────
+async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            return await fn();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const is429 = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED');
+            if (!is429 || attempt === maxAttempts) throw err;
+            const secondsMatch = msg.match(/retry in (\d+\.?\d*)s/i);
+            const waitMs = secondsMatch ? Math.min(parseFloat(secondsMatch[1]) * 1000 + 500, 65000) : 20000;
+            console.log(`[generate-image] 429 — waiting ${Math.round(waitMs / 1000)}s before retry ${attempt + 1}/${maxAttempts}`);
+            await new Promise(r => setTimeout(r, waitMs));
+        }
+    }
+    throw new Error('Max retries exceeded');
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function publicPathToFs(urlPath: string): string {
@@ -152,13 +170,13 @@ export async function POST(req: NextRequest) {
                 '| base:', !!baseImageBase64,
             );
 
-            const response = await ai.models.generateContent({
+            const response = await withRetry(() => ai.models.generateContent({
                 model: resolveModelId(modelId),
                 contents: [{ role: 'user', parts: [...refParts, { text: fullPrompt }] }],
                 config: {
                     responseModalities: ['image', 'text'],
                 },
-            });
+            }));
 
             const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
 
@@ -174,7 +192,7 @@ export async function POST(req: NextRequest) {
 
         } else {
             // Imagen (text-to-image only)
-            const response = await ai.models.generateImages({
+            const response = await withRetry(() => ai.models.generateImages({
                 model: resolveModelId(modelId),
                 prompt,
                 config: {
@@ -183,7 +201,7 @@ export async function POST(req: NextRequest) {
                     safetyFilterLevel: 'BLOCK_LOW_AND_ABOVE',
                     personGeneration: 'ALLOW_ADULT',
                 } as Parameters<typeof ai.models.generateImages>[0]['config'],
-            });
+            }));
 
             const image = response.generatedImages?.[0];
             if (image?.image?.imageBytes) {

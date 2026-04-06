@@ -12,6 +12,26 @@ function resolveModelId(id: string): string {
     return found?.apiModel ?? id;
 }
 
+// ─── Auto-retry on 429 rate limit ────────────────────────────────────────────
+// Gemini embeds the suggested wait time in the error message: "retry in 49.07s"
+async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            return await fn();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const is429 = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED');
+            if (!is429 || attempt === maxAttempts) throw err;
+            // Parse suggested retry delay from error, e.g. "retry in 49.07s"
+            const secondsMatch = msg.match(/retry in (\d+\.?\d*)s/i);
+            const waitMs = secondsMatch ? Math.min(parseFloat(secondsMatch[1]) * 1000 + 500, 65000) : 20000;
+            console.log(`[inpaint] 429 rate limit — waiting ${Math.round(waitMs / 1000)}s before retry ${attempt + 1}/${maxAttempts}`);
+            await new Promise(r => setTimeout(r, waitMs));
+        }
+    }
+    throw new Error('Max retries exceeded');
+}
+
 const BRAND_REF_DIR = path.join(process.cwd(), 'public', 'brand-references');
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif']);
 
@@ -98,11 +118,11 @@ export async function POST(req: NextRequest) {
 
         console.log('[inpaint] zone:', zoneLabel, '| prompt len:', inpaintPrompt.length, '| brand refs:', brandRefs.length);
 
-        const response = await ai.models.generateContent({
+        const response = await withRetry(() => ai.models.generateContent({
             model: resolveModelId(modelId),
             contents: [{ role: 'user', parts: [...parts, { text: inpaintPrompt }] }],
             config: { responseModalities: ['image', 'text'] },
-        });
+        }));
 
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (imagePart?.inlineData) {
