@@ -689,11 +689,23 @@ export default function HomePage() {
                         });
                     }
                 }
-                // Merge: keep in-session jobs (higher fidelity) and add disk jobs not already present
+                // Merge: add genuinely new disk jobs AND restore resultUrl/feedback on
+                // existing jobs that had it stripped from sessionStorage.
                 setJobs(prev => {
-                    const existingIds = new Set(prev.map(j => j.id));
+                    const diskById = new Map(diskJobs.map(j => [j.id, j]));
+                    const patched = prev.map(j => {
+                        const disk = diskById.get(j.id);
+                        if (!disk) return j;
+                        // Restore disk path and feedback onto sessionStorage shell
+                        return {
+                            ...j,
+                            resultUrl: j.resultUrl || disk.resultUrl,
+                            feedback: j.feedback || disk.feedback,
+                        };
+                    });
+                    const existingIds = new Set(patched.map(j => j.id));
                     const toAdd = diskJobs.filter(j => !existingIds.has(j.id));
-                    return toAdd.length ? [...prev, ...toAdd] : prev;
+                    return toAdd.length ? [...patched, ...toAdd] : patched;
                 });
             }
         } catch { /* ignore */ }
