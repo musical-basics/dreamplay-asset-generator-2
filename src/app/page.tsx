@@ -1190,7 +1190,20 @@ export default function HomePage() {
                     return;
                 }
             }
+            // Library grid lightbox: arrow key navigation when opened via Space from grid
+            if (lightboxSrc && lbPerfectIdx < 0) {
+                const flatPaths = allVisibleImages.map(i => i.path);
+                const idx = flatPaths.indexOf(lightboxSrc);
+                if (e.key === 'ArrowLeft' && idx > 0) {
+                    e.preventDefault(); setLightboxSrc(flatPaths[idx - 1]); setSelectedGridImage(flatPaths[idx - 1]); return;
+                }
+                if (e.key === 'ArrowRight' && idx < flatPaths.length - 1) {
+                    e.preventDefault(); setLightboxSrc(flatPaths[idx + 1]); setSelectedGridImage(flatPaths[idx + 1]); return;
+                }
+            }
             if (!selectedGridImage) return;
+            // Space — open selected library image in lightbox
+            if (e.key === ' ') { e.preventDefault(); setLightboxSrc(selectedGridImage); setLbPerfectIdx(-1); return; }
             const n = Number(e.key);
             if (n >= 1 && n <= 5) setMeta(selectedGridImage, { stars: n as StarRating });
             if (e.key === '0') setMeta(selectedGridImage, { stars: 0 });
