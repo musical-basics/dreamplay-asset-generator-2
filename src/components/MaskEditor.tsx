@@ -56,7 +56,7 @@ function buildMaskPng(imgW: number, imgH: number, rect: MaskRect): string {
     return canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
 }
 
-export default function MaskEditor({ imageBase64, imageMimeType, modelId, formatLabel, onResult, onClose }: MaskEditorProps) {
+export default function MaskEditor({ imageBase64: initialBase64, imageMimeType, modelId, formatLabel, onResult, onClose }: MaskEditorProps) {
     const [tab, setTab] = useState<TabMode>('marquee');
     const [mask, setMask] = useState<MaskRect | null>(null);
     const [selectedZone, setSelectedZone] = useState<typeof AI_ZONES[0] | null>(null);
@@ -66,13 +66,28 @@ export default function MaskEditor({ imageBase64, imageMimeType, modelId, format
     const [isApplying, setIsApplying] = useState(false);
     const [error, setError] = useState('');
 
+    // ── Undo history ────────────────────────────────────────────────────────────
+    // currentBase64 is the live image shown in the editor.
+    // undoStack holds previous base64 snapshots (oldest first).
+    const [currentBase64, setCurrentBase64] = useState(initialBase64);
+    const [undoStack, setUndoStack] = useState<string[]>([]);
+
+    function pushUndo(base64: string) {
+        setUndoStack(prev => [...prev.slice(-19), base64]); // keep last 20
+    }
+    function handleUndo() {
+        if (undoStack.length === 0) return;
+        setCurrentBase64(undoStack[undoStack.length - 1]);
+        setUndoStack(prev => prev.slice(0, -1));
+    }
+
     // Canvas drag state
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const imgRef = useRef<HTMLImageElement | null>(null);
     const dragStart = useRef<{ x: number; y: number } | null>(null);
     const [imgNaturalSize, setImgNaturalSize] = useState<{ w: number; h: number }>({ w: 1, h: 1 });
 
-    const dataUrl = `data:${imageMimeType};base64,${imageBase64}`;
+    const dataUrl = `data:${imageMimeType};base64,${currentBase64}`;
 
     // Load image to get natural dimensions
     useEffect(() => {
@@ -166,7 +181,7 @@ export default function MaskEditor({ imageBase64, imageMimeType, modelId, format
             const res = await fetch('/api/magic-select', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageBase64, imageMimeType, description: magicDesc, modelId }),
+                body: JSON.stringify({ imageBase64: currentBase64, imageMimeType, description: magicDesc, modelId }),
             });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
@@ -196,7 +211,7 @@ export default function MaskEditor({ imageBase64, imageMimeType, modelId, format
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        imageBase64,
+                        imageBase64: currentBase64,
                         imageMimeType,
                         maskBase64,
                         prompt: prompt.trim(),
@@ -209,6 +224,9 @@ export default function MaskEditor({ imageBase64, imageMimeType, modelId, format
             }
             const data = await res.json();
             if (data.error) throw new Error(data.error);
+            // Push current image to undo stack before updating
+            pushUndo(currentBase64);
+            setCurrentBase64(data.base64);
             onResult(data.base64, data.mimeType);
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
@@ -239,8 +257,27 @@ export default function MaskEditor({ imageBase64, imageMimeType, modelId, format
                 flexShrink: 0,
             }}>
                 <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 8px' }}>✕ Close</button>
-                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#facc15', letterSpacing: '0.05em' }}>🎭 MASK &amp; FIX</span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.8)', letterSpacing: '0.05em' }}>🎭 MASK &amp; FIX</span>
                 <span style={{ fontSize: '0.65rem', opacity: 0.5 }}>{formatLabel} · {modelId}</span>
+                {/* Undo button — only shown when there's history */}
+                {undoStack.length > 0 && (
+                    <button
+                        onClick={handleUndo}
+                        title={`Undo last fix (${undoStack.length} available)`}
+                        style={{
+                            marginLeft: 'auto', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)',
+                            borderRadius: 4, color: 'rgba(255,255,255,0.75)', cursor: 'pointer',
+                            fontSize: '0.65rem', fontWeight: 600, padding: '2px 10px',
+                            display: 'flex', alignItems: 'center', gap: '0.35rem',
+                        }}
+                    >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="9 14 4 9 9 4"/>
+                            <path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+                        </svg>
+                        Undo ({undoStack.length})
+                    </button>
+                )}
             </div>
 
             {/* ── Body ── */}
