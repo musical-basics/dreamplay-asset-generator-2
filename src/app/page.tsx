@@ -378,7 +378,7 @@ export default function HomePage() {
                     res = await fetch('/api/generate-image', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prompt: newJob.prompt, modelId: newJob.modelId,
-                            aspectRatio: fmt.aspectRatio, refImagePaths: selectedRefPaths, brandSuffix: brandSuffix ?? undefined }),
+                            aspectRatio: fmt.aspectRatio, refImagePaths: selectedRefPaths, roleRefs, brandSuffix: brandSuffix ?? undefined }),
                     });
                 } catch {
                     throw new Error('Server unreachable — make sure the dev server is running on port 3000');
@@ -468,10 +468,11 @@ export default function HomePage() {
                     try {
                         res = await fetch('/api/generate-image', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
+                        body: JSON.stringify({
                                 prompt: newJob.prompt, modelId: newJob.modelId,
                                 aspectRatio: fmt.aspectRatio,
                                 refImagePaths: selectedRefPaths,
+                                roleRefs,
                                 brandSuffix: brandSuffix ?? undefined,
                             }),
                         });
@@ -561,6 +562,13 @@ export default function HomePage() {
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
     const [lbJob, setLbJob] = useState<GenerationJob | null>(null); // filmstrip lightbox
+    const [lbPerfectIdx, setLbPerfectIdx] = useState<number>(-1); // which perfect image is in lightbox
+    // Helper: open perfect-box image in lightbox, tracking index for arrow navigation
+    const openPerfectLightbox = useCallback((idx: number, images: string[]) => {
+        if (idx < 0 || idx >= images.length) return;
+        setLightboxSrc(images[idx]);
+        setLbPerfectIdx(idx);
+    }, []);
     const [activeStrip, setActiveStrip] = useState<string | null>(null);
     const [maskEditorJob, setMaskEditorJob] = useState<GenerationJob | null>(null);
     const [thumbSize, setThumbSize] = useState(90); // px for grid columns
@@ -630,6 +638,12 @@ export default function HomePage() {
     };
     const [refTags, setRefTags] = useState<Map<string, RefRole>>(new Map());
     const [priorityOrder, setPriorityOrder] = useState<RefRole[]>(['Product', 'Talent', 'Background']);
+    // Role-specific reference images dropped directly into each slot (max 2 per role)
+    const [roleRefs, setRoleRefs] = useState<Record<RefRole, string[]>>({ Product: [], Talent: [], Background: [] });
+    const addRoleRef = (role: RefRole, path: string) =>
+        setRoleRefs(prev => ({ ...prev, [role]: prev[role].includes(path) ? prev[role] : [...prev[role], path].slice(0, 2) }));
+    const removeRoleRef = (role: RefRole, path: string) =>
+        setRoleRefs(prev => ({ ...prev, [role]: prev[role].filter(p => p !== path) }));
 
     const cycleRefTag = (id: string) =>
         setRefTags(prev => {
@@ -1082,7 +1096,7 @@ export default function HomePage() {
                 try {
                     res = await fetch(fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, refImagePaths: entry.refPaths, brandSuffix, prioritySuffix }),
+                        body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, refImagePaths: entry.refPaths, roleRefs, brandSuffix, prioritySuffix }),
                     });
                 } catch {
                     throw new Error('Server unreachable — make sure the dev server is running on port 3000');
@@ -1152,6 +1166,27 @@ export default function HomePage() {
                 const idx = doneJobs.findIndex(j => j.id === lbJob.id);
                 if (e.key === 'ArrowLeft' && idx > 0) { e.preventDefault(); setLbJob(doneJobs[idx - 1]); return; }
                 if (e.key === 'ArrowRight' && idx < doneJobs.length - 1) { e.preventDefault(); setLbJob(doneJobs[idx + 1]); return; }
+            }
+            // Perfect-box lightbox: arrow key navigation
+            if (lightboxSrc && lbPerfectIdx >= 0) {
+                if (e.key === 'ArrowLeft' && lbPerfectIdx > 0) {
+                    e.preventDefault();
+                    openPerfectLightbox(lbPerfectIdx - 1, perfectImages);
+                    return;
+                }
+                if (e.key === 'ArrowRight' && lbPerfectIdx < perfectImages.length - 1) {
+                    e.preventDefault();
+                    openPerfectLightbox(lbPerfectIdx + 1, perfectImages);
+                    return;
+                }
+                // Space in lightbox = close + select last-viewed image
+                if (e.key === ' ') {
+                    e.preventDefault();
+                    if (lightboxSrc) toggleRefSelection(lightboxSrc);
+                    setLightboxSrc(null);
+                    setLbPerfectIdx(-1);
+                    return;
+                }
             }
             if (!selectedGridImage) return;
             const n = Number(e.key);
@@ -1261,7 +1296,7 @@ export default function HomePage() {
                             if (jsonPath) { copyToFolder('perfect-generations', jsonPath); return; }
                             if (e.dataTransfer.files.length) uploadToFolder('perfect-generations', e.dataTransfer.files);
                         }}
-                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverPerfect ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)'}`, background: isDragOverPerfect ? 'rgba(255,255,255,0.07)' : 'transparent', transition: 'all 0.15s', minHeight: perfectImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', padding: perfectImages.length ? 4 : 0, cursor: 'pointer', maxHeight: 220, overflowY: 'auto' }}
+                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverPerfect ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)'}`, background: isDragOverPerfect ? 'rgba(255,255,255,0.07)' : 'transparent', transition: 'all 0.15s', minHeight: perfectImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', padding: perfectImages.length ? 4 : 0, cursor: 'pointer', maxHeight: 320, overflowY: 'auto' }}
                         onClick={() => !perfectImages.length && perfectInputRef.current?.click()}
                     >
                         {perfectImages.length === 0 ? (
@@ -1300,7 +1335,10 @@ export default function HomePage() {
                                             style={{ position: 'relative', aspectRatio: '1', borderRadius: 4, overflow: 'hidden', cursor: 'pointer', border: isSel ? '2px solid rgba(255,255,255,0.65)' : '2px solid transparent', transition: 'all 0.1s' }}
                                             tabIndex={0}
                                             onClick={ev => { ev.stopPropagation(); toggleRefSelection(p); }}
-                                            onKeyDown={ev => { if (ev.key === ' ') { ev.preventDefault(); setLightboxSrc(p); } if (ev.key === 'Enter') { ev.preventDefault(); toggleRefSelection(p); } }}
+                                            onKeyDown={ev => {
+                                                if (ev.key === ' ') { ev.preventDefault(); openPerfectLightbox(idx, perfectImages); }
+                                                if (ev.key === 'Enter') { ev.preventDefault(); toggleRefSelection(p); }
+                                            }}
                                             title="Click/Enter to select as ref · Space to preview · Drag to reorder"
                                         >
                                             <img src={thumbUrl(p)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
@@ -1505,19 +1543,43 @@ export default function HomePage() {
                         {activeRefCount > 0 && (
                             <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--lr-border)', paddingTop: '0.4rem' }}>
                                 <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.3rem' }}>Priority Order</div>
-                                {priorityOrder.map((role, i) => (
-                                    <div key={role} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.22rem' }}>
-                                        <span style={{ fontSize: '0.52rem', color: 'var(--text-muted)', width: 12, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                                        <div style={{ flex: 1, background: REF_ROLE_COLORS[role] + '22', border: `1px solid ${REF_ROLE_COLORS[role]}55`, borderRadius: 4, padding: '0.18rem 0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: REF_ROLE_COLORS[role], display: 'inline-block', flexShrink: 0 }} />
-                                            <span style={{ fontSize: '0.64rem', fontWeight: 600, color: REF_ROLE_COLORS[role] }}>{role}</span>
-                                            <span style={{ fontSize: '0.54rem', color: 'var(--text-muted)', marginLeft: 2 }}>
-                                                {role === 'Product' ? '— layout anchor' : role === 'Talent' ? '— model/actor' : '— setting/bg'}
-                                            </span>
+                             {priorityOrder.map((role, i) => (
+                                    <div key={role} style={{ marginBottom: '0.3rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.15rem' }}>
+                                            <span style={{ fontSize: '0.52rem', color: 'var(--text-muted)', width: 12, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
+                                            <div style={{ flex: 1, background: REF_ROLE_COLORS[role] + '22', border: `1px solid ${REF_ROLE_COLORS[role]}55`, borderRadius: 4, padding: '0.18rem 0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: REF_ROLE_COLORS[role], display: 'inline-block', flexShrink: 0 }} />
+                                                <span style={{ fontSize: '0.64rem', fontWeight: 600, color: REF_ROLE_COLORS[role] }}>{role}</span>
+                                                <span style={{ fontSize: '0.54rem', color: 'var(--text-muted)', marginLeft: 2 }}>
+                                                    {role === 'Product' ? '— layout anchor' : role === 'Talent' ? '— model/actor' : '— setting/bg'}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                <button onClick={() => movePriority(role, -1)} disabled={i === 0} style={{ border: 'none', background: 'none', color: i === 0 ? 'var(--lr-border)' : 'var(--text-muted)', cursor: i === 0 ? 'default' : 'pointer', fontSize: '0.55rem', lineHeight: 1, padding: 0 }}>▲</button>
+                                                <button onClick={() => movePriority(role, 1)} disabled={i === priorityOrder.length - 1} style={{ border: 'none', background: 'none', color: i === priorityOrder.length - 1 ? 'var(--lr-border)' : 'var(--text-muted)', cursor: i === priorityOrder.length - 1 ? 'default' : 'pointer', fontSize: '0.55rem', lineHeight: 1, padding: 0 }}>▼</button>
+                                            </div>
                                         </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                            <button onClick={() => movePriority(role, -1)} disabled={i === 0} style={{ border: 'none', background: 'none', color: i === 0 ? 'var(--lr-border)' : 'var(--text-muted)', cursor: i === 0 ? 'default' : 'pointer', fontSize: '0.55rem', lineHeight: 1, padding: 0 }}>▲</button>
-                                            <button onClick={() => movePriority(role, 1)} disabled={i === priorityOrder.length - 1} style={{ border: 'none', background: 'none', color: i === priorityOrder.length - 1 ? 'var(--lr-border)' : 'var(--text-muted)', cursor: i === priorityOrder.length - 1 ? 'default' : 'pointer', fontSize: '0.55rem', lineHeight: 1, padding: 0 }}>▼</button>
+                                        {/* ── Role reference drop zone ── */}
+                                        <div
+                                            onDragOver={e => e.preventDefault()}
+                                            onDrop={e => {
+                                                e.preventDefault();
+                                                const p = e.dataTransfer.getData('application/x-image-path');
+                                                if (p) addRoleRef(role, p);
+                                            }}
+                                            style={{ marginLeft: 18, display: 'flex', gap: 3, alignItems: 'center', minHeight: 28, background: 'rgba(255,255,255,0.03)', border: `1px dashed ${REF_ROLE_COLORS[role]}44`, borderRadius: 4, padding: '2px 4px', flexWrap: 'wrap' }}
+                                        >
+                                            {roleRefs[role].length === 0 ? (
+                                                <span style={{ fontSize: '0.52rem', color: 'var(--text-muted)', pointerEvents: 'none' }}>drag image here (max 2)</span>
+                                            ) : roleRefs[role].map(p => (
+                                                <div key={p} style={{ position: 'relative', width: 24, height: 24, borderRadius: 3, overflow: 'hidden', flexShrink: 0 }}>
+                                                    <img src={thumbUrl(p)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    <button onClick={() => removeRoleRef(role, p)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', border: 'none', color: '#fff', fontSize: '0.5rem', cursor: 'pointer', display: 'none', alignItems: 'center', justifyContent: 'center' }} className="role-ref-rm">✕</button>
+                                                </div>
+                                            ))}
+                                            {roleRefs[role].length > 0 && (
+                                                <button onClick={() => setRoleRefs(prev => ({ ...prev, [role]: [] }))} style={{ fontSize: '0.48rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 'auto' }}>clear</button>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

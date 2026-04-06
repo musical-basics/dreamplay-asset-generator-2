@@ -136,7 +136,7 @@ The first images are PERFECT GENERATION references — study their:
 
 export async function POST(req: NextRequest) {
     try {
-        const { prompt, modelId, aspectRatio, refImagePaths, brandSuffix, prioritySuffix, baseImageBase64, baseImageMimeType } = await req.json();
+        const { prompt, modelId, aspectRatio, refImagePaths, roleRefs, brandSuffix, prioritySuffix, baseImageBase64, baseImageMimeType } = await req.json();
 
         if (!prompt || !modelId) {
             return NextResponse.json({ error: 'Missing prompt or modelId' }, { status: 400 });
@@ -157,7 +157,34 @@ export async function POST(req: NextRequest) {
                 refParts.push({ inlineData: { data: baseImageBase64, mimeType: baseImageMimeType || 'image/png' } });
             }
 
-            // 3. User-selected reference images — these are SUBJECT references, not brand refs
+            // 3. Role-specific reference images (Product / Talent / Background)
+            let roleRefInstruction = '';
+            const roleLabelMap: Record<string, string> = {
+                Product: 'PRODUCT REFERENCE — This image shows the exact product (piano/keyboard). Match its shape, color, branding, key layout, and physical details precisely. This is the primary layout anchor.',
+                Talent: 'TALENT / ACTOR REFERENCE — This image shows the specific person/model. Preserve their exact facial features, skin tone, hair, and body type. Do NOT substitute with a different person.',
+                Background: 'BACKGROUND / SETTING REFERENCE — This image defines the scene, environment, and atmosphere. Replicate the key visual elements, lighting mood, and spatial context.',
+            };
+            if (roleRefs && typeof roleRefs === 'object') {
+                const roleOrder: string[] = ['Product', 'Talent', 'Background'];
+                for (const role of roleOrder) {
+                    const paths: string[] = Array.isArray(roleRefs[role]) ? roleRefs[role] : [];
+                    if (paths.length === 0) continue;
+                    const maxSlots = Math.max(0, 8 - refParts.length);
+                    if (maxSlots <= 0) break;
+                    const loaded = await Promise.all(
+                        paths.slice(0, Math.min(2, maxSlots)).map((p: string) => loadImageAsBase64(publicPathToFs(p)))
+                    );
+                    let added = 0;
+                    for (const img of loaded) {
+                        if (img) { refParts.push({ inlineData: img }); added++; }
+                    }
+                    if (added > 0) {
+                        roleRefInstruction += `\n\n=== ${role.toUpperCase()} REFERENCE (LAST ${added} IMAGE${added > 1 ? 'S' : ''} ABOVE) ===\n${roleLabelMap[role]}\n===`;
+                    }
+                }
+            }
+
+            // 4. General user-selected reference images
             let userRefInstruction = '';
             if (Array.isArray(refImagePaths) && refImagePaths.length > 0) {
                 const maxUser = Math.max(0, 8 - refParts.length);
@@ -169,15 +196,7 @@ export async function POST(req: NextRequest) {
                     if (img) { refParts.push({ inlineData: img }); addedCount++; }
                 }
                 if (addedCount > 0) {
-                    userRefInstruction = `
-
-=== USER SUBJECT REFERENCES (LAST ${addedCount} IMAGE${addedCount > 1 ? 'S' : ''} ABOVE) ===
-These images show the SPECIFIC SUBJECT(S) the user wants in the scene.
-- PRESERVE the exact appearance of the person, animal, or object shown: face, body, breed, color, size.
-- Do NOT swap, replace, or hallucinate a different subject.
-- Apply ONLY the changes described in the user prompt (e.g. add clothing, change background, add product).
-- The subject's identity must be recognizable and consistent with the reference.
-===`;
+                    userRefInstruction = `\n\n=== USER SUBJECT REFERENCES (LAST ${addedCount} IMAGE${addedCount > 1 ? 'S' : ''} ABOVE) ===\nThese images show the SPECIFIC SUBJECT(S) the user wants in the scene.\n- PRESERVE the exact appearance of the person, animal, or object shown: face, body, breed, color, size.\n- Do NOT swap, replace, or hallucinate a different subject.\n- Apply ONLY the changes described in the user prompt (e.g. add clothing, change background, add product).\n- The subject's identity must be recognizable and consistent with the reference.\n===`;
                 }
             }
 
@@ -202,6 +221,7 @@ These images show the SPECIFIC SUBJECT(S) the user wants in the scene.
                 ratioHint +
                 baseCompInstruction +
                 refInstruction +
+                roleRefInstruction +
                 userRefInstruction +
                 DS60_MASTER_CONSTRAINT +
                 brandInstruction +
