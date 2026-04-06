@@ -2205,7 +2205,7 @@ export default function HomePage() {
             </div>
 
             {/* ── FILMSTRIP ── */}
-            <footer className="filmstrip">
+            <footer className="filmstrip" suppressHydrationWarning>
                 {jobs.length === 0 ? (
                     <div className="strip-empty">Checked formats generate as separate assets — all from the same prompt. Select formats above then click Generate.</div>
                 ) : (() => {
