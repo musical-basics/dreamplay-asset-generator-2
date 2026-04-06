@@ -602,9 +602,13 @@ export default function HomePage() {
     const [isGenerating, setIsGenerating] = useState(false);
     useEffect(() => {
         try {
-            // Strip base64 image data before storing — blows the 5 MB sessionStorage quota.
+            // Strip base64 data: URLs before storing (huge blobs blow the 5MB quota).
+            // Disk paths like /generated/... are tiny — keep them so thumbnails survive reload.
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const slim = jobs.map(({ resultUrl, resultBase64, ...rest }) => rest);
+            const slim = jobs.map(({ resultBase64, ...rest }) => ({
+                ...rest,
+                resultUrl: rest.resultUrl?.startsWith('data:') ? undefined : rest.resultUrl,
+            }));
             sessionStorage.setItem('dp_jobs', JSON.stringify(slim));
         } catch { /* quota exceeded — skip persistence */ }
     }, [jobs]);
