@@ -93,30 +93,95 @@ export async function POST(req: NextRequest) {
         }
 
         const ai = getGoogleAI();
+        const sharp = (await import('sharp')).default;
 
         // Brand references — keep the model anchored to DS 6.0 truth even during inpaint
         const brandRefs = await loadBrandRefs();
 
+        // ── Context-padded inpainting ─────────────────────────────────────────
+        // If the masked zone is very narrow, sending the full image with a tiny
+        // white sliver gives Gemini no context — it generates garbage.
+        // Solution: crop a padded region around the zone, run Gemini on the crop,
+        // then composite only the tight zone pixels back onto the original.
+
+        const origBuf = Buffer.from(imageBase64, 'base64');
+        const maskBuf = Buffer.from(maskBase64, 'base64');
+        const { width: fullW, height: fullH } = await sharp(origBuf).metadata();
+        const W = fullW!, H = fullH!;
+
+        // Find tight bounding box of white pixels in the mask
+        const maskGray = await sharp(maskBuf).resize(W, H).greyscale().raw().toBuffer();
+        let mx1 = W, my1 = H, mx2 = 0, my2 = 0;
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                if (maskGray[y * W + x] >= 128) {
+                    if (x < mx1) mx1 = x; if (x > mx2) mx2 = x;
+                    if (y < my1) my1 = y; if (y > my2) my2 = y;
+                }
+            }
+        }
+
+        // Tight zone dims
+        const zoneW = Math.max(1, mx2 - mx1 + 1);
+        const zoneH = Math.max(1, my2 - my1 + 1);
+
+        // Pad by 2× the zone size on each side so Gemini has context
+        const padX = Math.round(zoneW * 2);
+        const padY = Math.round(zoneH * 2);
+        const cx1 = Math.max(0, mx1 - padX);
+        const cy1 = Math.max(0, my1 - padY);
+        const cx2 = Math.min(W - 1, mx2 + padX);
+        const cy2 = Math.min(H - 1, my2 + padY);
+        const cropW = cx2 - cx1 + 1;
+        const cropH = cy2 - cy1 + 1;
+
+        const useContextCrop = (zoneW / W) < 0.25 || (zoneH / H) < 0.25;
+        console.log(`[inpaint] zone: ${zoneW}×${zoneH}px (${Math.round(zoneW/W*100)}%×${Math.round(zoneH/H*100)}%) | context-crop: ${useContextCrop}`);
+
+        let geminiImageB64: string;
+        let geminiMaskB64: string;
+        let geminiMime = 'image/png';
+
+        if (useContextCrop) {
+            // Crop image and rebuild mask to match the padded crop
+            const cropBuf = await sharp(origBuf)
+                .extract({ left: cx1, top: cy1, width: cropW, height: cropH })
+                .png().toBuffer();
+            geminiImageB64 = cropBuf.toString('base64');
+
+            // Rebuild mask: white only where zone overlaps the crop
+            const cropCanvas = Buffer.alloc(cropW * cropH).fill(0);
+            const relX1 = mx1 - cx1, relY1 = my1 - cy1;
+            for (let y = 0; y < zoneH; y++) {
+                for (let x = 0; x < zoneW; x++) {
+                    cropCanvas[(relY1 + y) * cropW + (relX1 + x)] = 255;
+                }
+            }
+            const cropMaskBuf = await sharp(cropCanvas, { raw: { width: cropW, height: cropH, channels: 1 } })
+                .png().toBuffer();
+            geminiMaskB64 = cropMaskBuf.toString('base64');
+        } else {
+            geminiImageB64 = imageBase64;
+            geminiMaskB64 = maskBase64;
+        }
+
         const parts: { inlineData: { data: string; mimeType: string } }[] = [
-            // 1. Brand references first
             ...brandRefs.map(r => ({ inlineData: r })),
-            // 2. Original image
-            { inlineData: { data: imageBase64, mimeType: imageMimeType || 'image/png' } },
-            // 3. Mask (white = region to replace, black = preserve)
-            { inlineData: { data: maskBase64, mimeType: 'image/png' } },
+            { inlineData: { data: geminiImageB64, mimeType: geminiMime } },
+            { inlineData: { data: geminiMaskB64, mimeType: 'image/png' } },
         ];
 
         const inpaintPrompt =
             `You are performing a MASKED INPAINT edit on the provided image.\n\n` +
             `RULES:\n` +
-            `1. The SECOND image is the original. The THIRD image is a mask where WHITE pixels mark the region to edit and BLACK pixels mark regions to keep PIXEL-PERFECT.\n` +
-            `2. Output the FULL image at the SAME resolution and composition as the original.\n` +
-            `3. ONLY modify the white (masked) region — the black region must be reproduced exactly, with NO changes whatsoever.\n` +
-            `4. The first reference images are canonical DS 6.0 product references — use them to correct any product details inside the masked region.\n\n` +
-            `TARGETED EDIT (apply only within the masked region):\n${prompt}\n` +
-            (zoneLabel ? `\nZone: ${zoneLabel}` : '');
+            `1. The SECOND image is the original. The THIRD image is a mask where WHITE pixels mark the ONLY region to edit — BLACK pixels must be reproduced PIXEL-PERFECT.\n` +
+            `2. Output the FULL image at the SAME resolution and composition as the input.\n` +
+            `3. The surrounding context (black mask region) must be UNCHANGED — only fix what's inside the white box.\n` +
+            `4. Reference images are canonical DS 6.0 product shots — use them to correct any product details inside the masked region.\n\n` +
+            `TARGETED EDIT (apply ONLY within the white masked region):\n${prompt}\n` +
+            (zoneLabel ? `\nZone being edited: ${zoneLabel}` : '');
 
-        console.log('[inpaint] zone:', zoneLabel, '| prompt len:', inpaintPrompt.length, '| brand refs:', brandRefs.length);
+        console.log('[inpaint] prompt len:', inpaintPrompt.length, '| brand refs:', brandRefs.length);
 
         const response = await withRetry(() => ai.models.generateContent({
             model: resolveModelId(modelId),
@@ -129,38 +194,44 @@ export async function POST(req: NextRequest) {
             const { data: aiData, mimeType: aiMime } = imagePart.inlineData as { data: string; mimeType: string };
 
             // ── Pixel-exact zone isolation via sharp compositing ──────────────
-            // Regardless of what Gemini modified outside the selection, we paste
-            // the ORIGINAL pixels back over every black (non-selected) region.
-            // This makes the marquee box a true hard guardrail.
+            // If context-crop was used, Gemini's result is in crop-space.
+            // We extract the tight zone from the AI result and paste it back
+            // onto the original full image at the correct position.
             try {
-                const sharp = (await import('sharp')).default;
-                const origBuf   = Buffer.from(imageBase64, 'base64');
                 const aiBuf     = Buffer.from(aiData, 'base64');
-                const maskBuf   = Buffer.from(maskBase64, 'base64');
 
-                // Normalise everything to PNG RGBA at the same size as the original
-                const { width, height } = await sharp(origBuf).metadata();
-                const [origRaw, aiRaw, maskRaw] = await Promise.all([
-                    sharp(origBuf).resize(width, height).ensureAlpha().raw().toBuffer(),
-                    sharp(aiBuf).resize(width, height).ensureAlpha().raw().toBuffer(),
-                    // Mask is greyscale: threshold so anything ≥128 = edit zone (white)
-                    sharp(maskBuf).resize(width, height).greyscale().raw().toBuffer(),
-                ]);
+                const origRaw = await sharp(origBuf).resize(W, H).ensureAlpha().raw().toBuffer();
+                const out = Buffer.from(origRaw); // start with original, overwrite only the zone
 
-                // Composite: for each pixel, if mask value < 128 (black = preserve),
-                // copy original RGBA; otherwise keep Gemini's RGBA.
-                const pixels = width! * height!;
-                const out = Buffer.alloc(pixels * 4);
-                for (let i = 0; i < pixels; i++) {
-                    const isEdited = maskRaw[i] >= 128;
-                    const src = isEdited ? aiRaw : origRaw;
-                    out[i * 4]     = src[i * 4];
-                    out[i * 4 + 1] = src[i * 4 + 1];
-                    out[i * 4 + 2] = src[i * 4 + 2];
-                    out[i * 4 + 3] = src[i * 4 + 3];
+                if (useContextCrop) {
+                    // AI result is in crop-space — extract zone pixels from it
+                    const aiCropRaw = await sharp(aiBuf).resize(cropW, cropH).ensureAlpha().raw().toBuffer();
+                    const relX1 = mx1 - cx1, relY1 = my1 - cy1;
+                    for (let zy = 0; zy < zoneH; zy++) {
+                        for (let zx = 0; zx < zoneW; zx++) {
+                            const srcIdx = ((relY1 + zy) * cropW + (relX1 + zx)) * 4;
+                            const dstIdx = ((my1 + zy) * W + (mx1 + zx)) * 4;
+                            out[dstIdx]     = aiCropRaw[srcIdx];
+                            out[dstIdx + 1] = aiCropRaw[srcIdx + 1];
+                            out[dstIdx + 2] = aiCropRaw[srcIdx + 2];
+                            out[dstIdx + 3] = aiCropRaw[srcIdx + 3];
+                        }
+                    }
+                } else {
+                    // Full-image mode: composite using mask
+                    const aiRaw  = await sharp(aiBuf).resize(W, H).ensureAlpha().raw().toBuffer();
+                    const pixels = W * H;
+                    for (let i = 0; i < pixels; i++) {
+                        if (maskGray[i] >= 128) {
+                            out[i * 4]     = aiRaw[i * 4];
+                            out[i * 4 + 1] = aiRaw[i * 4 + 1];
+                            out[i * 4 + 2] = aiRaw[i * 4 + 2];
+                            out[i * 4 + 3] = aiRaw[i * 4 + 3];
+                        }
+                    }
                 }
 
-                const composited = await sharp(out, { raw: { width: width!, height: height!, channels: 4 } })
+                const composited = await sharp(out, { raw: { width: W, height: H, channels: 4 } })
                     .png()
                     .toBuffer();
 
