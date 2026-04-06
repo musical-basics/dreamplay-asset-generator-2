@@ -38,7 +38,7 @@ const LABELS: LabelColor[] = ['none', 'red', 'yellow', 'green', 'blue', 'purple'
 const PRESET_DS60_STARTER =
 `DreamPlay DS 6.0 — 88-key digital piano. Luxury product photography, photorealistic rendering.
 Lighting: cinematic studio — soft key light upper-left, subtle fill, controlled specular. Shallow depth of field, subject sharp.
-Materials: matte black ABS chassis · gloss ivory white keys · matte black black-keys · flat-top matte rubber knobs · gold polished metal dial ring · satin rubber buttons (one gold accent) · metallic printed logo.`;
+Materials: match the SPEC colors below exactly. Do not default to any specific color — use only what is specified.`;
 
 const PRESET_NEGATIVE_GUARD =
 `STOP — do not render any of the following:
@@ -46,10 +46,11 @@ const PRESET_NEGATIVE_GUARD =
 ✗ More than 3 consecutive black keys in one cluster
 ✗ Invented logo letterforms, added taglines, or filled-in "Play" lettering (it must be outline stroke)
 ✗ Extra or missing knobs (exactly 2, identical, flat-top rubber)
-✗ Plain silver/chrome center dial (it has alternating rubber segments + gold ring)
-✗ Extra buttons or missing the 1 gold accent button
+✗ Plain silver/chrome center dial (it has alternating rubber arc segments with an accent band — match the reference image for colors)
+✗ Extra buttons or missing the 1 accent button in the 6-button grid
 ✗ Hexagonal mesh, dots, or perforations for speaker grills (straight horizontal grooves only)
-✗ Warped or stretched keyboard body proportions`;
+✗ Warped or stretched keyboard body proportions
+✗ Any color not specified in the SPEC below — do not invent or default to gold, chrome, or any metallic finish unless explicitly specified`;
 
 
 const FLAG_ICONS: Record<FlagState, string> = {
@@ -438,7 +439,7 @@ export default function HomePage() {
             if (fbIssues.some(i => i.includes('keyboard') || i.includes('key')))
                 corrections.push('CRITICAL FIX: Ensure the exact 2-black-GAP-3-black-GAP piano keyboard pattern. Count every group carefully.');
             if (fbIssues.includes('Wrong color/finish'))
-                corrections.push('CRITICAL: Use the correct DreamPlay brand colors — matte black chassis, gold/champagne logo, white keys.');
+                corrections.push('CRITICAL: Use the correct DreamPlay brand colors as specified in the prompt — do not default to gold, chrome, or metallic accents not in the spec.');
             if (fbIssues.includes('Logo missing/wrong'))
                 corrections.push('The DreamPlay logo must be clearly visible and correctly placed on the product.');
             if (fbIssues.includes('Hallucinated elements'))
