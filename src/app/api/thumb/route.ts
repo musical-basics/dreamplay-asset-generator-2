@@ -21,26 +21,24 @@ function cacheKey(urlPath: string, w: number): string {
 
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
-    const urlPath = searchParams.get('path');   // relative path
-    const source = searchParams.get('source');  // 'external' = PRODUCT_IMAGES_DIR
+    const urlPath = searchParams.get('path');   // e.g. /product-images/folder/img.jpg
     const w = parseInt(searchParams.get('w') || String(THUMB_W), 10);
 
     if (!urlPath) {
         return NextResponse.json({ error: 'Missing path' }, { status: 400 });
     }
 
-    let fsPath: string;
-    if (source === 'external' && process.env.PRODUCT_IMAGES_DIR) {
-        // Serve from the external local drive folder
-        const base = process.env.PRODUCT_IMAGES_DIR;
-        fsPath = path.join(base, decodeURIComponent(urlPath));
-        // Security: must stay inside PRODUCT_IMAGES_DIR
-        if (!fsPath.startsWith(base)) {
-            return new NextResponse(null, { status: 403 });
+    // Primary: try public/ first (existing static files)
+    let fsPath = path.join(process.cwd(), 'public', decodeURIComponent(urlPath));
+
+    // Fallback: if not in public/ and path is /product-images/..., check PRODUCT_IMAGES_DIR
+    if (!existsSync(fsPath) && process.env.PRODUCT_IMAGES_DIR && urlPath.startsWith('/product-images/')) {
+        const rel = decodeURIComponent(urlPath).replace(/^\/product-images\//, '');
+        const externalPath = path.join(process.env.PRODUCT_IMAGES_DIR, rel);
+        // Security: must stay within PRODUCT_IMAGES_DIR
+        if (externalPath.startsWith(process.env.PRODUCT_IMAGES_DIR) && existsSync(externalPath)) {
+            fsPath = externalPath;
         }
-    } else {
-        // Default: serve from public/
-        fsPath = path.join(process.cwd(), 'public', decodeURIComponent(urlPath));
     }
 
     if (!existsSync(fsPath)) {
