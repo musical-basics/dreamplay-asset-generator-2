@@ -1507,7 +1507,7 @@ export default function HomePage() {
                                 {selectedRefPaths.map((path, i) => {
                                     const role = refTags.get(path);
                                     return (
-                                        <div key={path} style={{ aspectRatio: '1', borderRadius: '3px', overflow: 'hidden', position: 'relative', border: '1px solid rgba(10,132,255,0.5)', cursor: 'pointer' }}>
+                                        <div key={path} draggable onDragStart={e => { e.dataTransfer.setData('application/x-image-path', path); e.dataTransfer.setData('imagePath', path); }} style={{ aspectRatio: '1', borderRadius: '3px', overflow: 'hidden', position: 'relative', border: '1px solid rgba(10,132,255,0.5)', cursor: 'grab' }}>
                                             {isVideoFile(path) ? (
                                                 <video src={path} muted playsInline preload="metadata"
                                                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}

@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
             let roleRefInstruction = '';
             const roleLabelMap: Record<string, string> = {
                 Product: 'PRODUCT REFERENCE — This image shows the exact product (piano/keyboard). Match its shape, color, branding, key layout, and physical details precisely. This is the primary layout anchor.',
-                Talent: 'TALENT / ACTOR REFERENCE — This image shows the specific person/model. Preserve their exact facial features, skin tone, hair, and body type. Do NOT substitute with a different person.',
+                Talent: 'TALENT / ACTOR REFERENCE — CRITICAL IDENTITY LOCK. This image shows THE SPECIFIC PERSON who must appear in the final image. You MUST replicate: their exact gender, face, skin tone, hair color/style, and body type with zero deviation. Do NOT generate a different person, do NOT change their gender, do NOT use a generic or stock face. The person in this reference IS the talent — treat their appearance as a hard constraint identical to product geometry.',
                 Background: 'BACKGROUND / SETTING REFERENCE — This image defines the scene, environment, and atmosphere. Replicate the key visual elements, lighting mood, and spatial context.',
             };
             if (roleRefs && typeof roleRefs === 'object') {
