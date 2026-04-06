@@ -780,6 +780,13 @@ export default function HomePage() {
             .catch(() => { });
     }, []);
 
+    const refreshProductLibrary = useCallback(() => {
+        fetch('/api/product-images')
+            .then(r => r.json())
+            .then(data => { if (data.grouped) setProductLibrary(data.grouped); })
+            .catch(() => {});
+    }, []);
+
     const refreshCustomFolders = useCallback(() => {
         fetch('/api/custom-folders')
             .then(r => r.json())
@@ -787,8 +794,9 @@ export default function HomePage() {
                 if (data.perfectGenerations) setPerfectImages(data.perfectGenerations);
                 if (data.needsFixing) setNeedsFixingImages(data.needsFixing);
             })
-            .catch(() => { });
-    }, []);
+            .catch(() => {});
+        refreshProductLibrary();
+    }, [refreshProductLibrary]);
 
     const uploadToFolder = useCallback(async (folder: string, files: FileList | File[]) => {
         const fileArr = Array.from(files);
@@ -800,6 +808,7 @@ export default function HomePage() {
             fileArr.forEach(f => fd.append('files', f));
             await fetch('/api/upload-to-folder', { method: 'POST', body: fd });
             refreshCustomFolders();
+            refreshProductLibrary();
         } catch { /* ignore */ } finally {
             setUploadingFolder(null);
         }
@@ -815,6 +824,7 @@ export default function HomePage() {
                 body: JSON.stringify({ sourcePath, folder }),
             });
             refreshCustomFolders();
+            refreshProductLibrary();
         } catch { /* ignore */ } finally {
             setUploadingFolder(null);
         }
@@ -1355,6 +1365,14 @@ export default function HomePage() {
                     </div>
 
                     <div className="folder-tree">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.3rem 0.75rem 0.1rem', marginBottom: 2 }}>
+                            <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Folders</span>
+                            <button
+                                onClick={refreshProductLibrary}
+                                title="Refresh folder list"
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '0 2px', lineHeight: 1 }}
+                            >↻</button>
+                        </div>
                         {isLoadingLibrary ? (
                             <div style={{ padding: '1rem 0.75rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Loading…</div>
                         ) : (
