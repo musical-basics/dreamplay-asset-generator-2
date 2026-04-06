@@ -829,6 +829,21 @@ export default function HomePage() {
             setUploadingFolder(null);
         }
     }, [refreshCustomFolders]);
+
+    const deletePerfectImage = useCallback(async (imgPath: string) => {
+        try {
+            await fetch(`/api/upload-to-folder?path=${encodeURIComponent(imgPath)}&folder=perfect-generations`, { method: 'DELETE' });
+            setPerfectImages(prev => prev.filter(p => p !== imgPath));
+        } catch { /* ignore */ }
+    }, []);
+
+    const deleteNeedsFixingImage = useCallback(async (imgPath: string) => {
+        try {
+            await fetch(`/api/upload-to-folder?path=${encodeURIComponent(imgPath)}&folder=needs-fixing`, { method: 'DELETE' });
+            setNeedsFixingImages(prev => prev.filter(p => p !== imgPath));
+        } catch { /* ignore */ }
+    }, []);
+
     // ─── Memoized + paginated images ──────────────────────────────────────────────
     const allVisibleImages = useMemo(() => {
         let entries: { path: string; name: string; folder: string }[] = [];
@@ -1246,7 +1261,7 @@ export default function HomePage() {
                             if (jsonPath) { copyToFolder('perfect-generations', jsonPath); return; }
                             if (e.dataTransfer.files.length) uploadToFolder('perfect-generations', e.dataTransfer.files);
                         }}
-                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverPerfect ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)'}`, background: isDragOverPerfect ? 'rgba(255,255,255,0.07)' : 'transparent', transition: 'all 0.15s', minHeight: perfectImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', gap: 3, padding: perfectImages.length ? 4 : 0, cursor: 'pointer' }}
+                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverPerfect ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)'}`, background: isDragOverPerfect ? 'rgba(255,255,255,0.07)' : 'transparent', transition: 'all 0.15s', minHeight: perfectImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', padding: perfectImages.length ? 4 : 0, cursor: 'pointer', maxHeight: 220, overflowY: 'auto' }}
                         onClick={() => !perfectImages.length && perfectInputRef.current?.click()}
                     >
                         {perfectImages.length === 0 ? (
@@ -1267,11 +1282,29 @@ export default function HomePage() {
                             </div>
                         ) : (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
-                                {perfectImages.map(p => {
+                                {perfectImages.map((p, idx) => {
                                     const isSel = selectedRefPaths.includes(p);
                                     return (
-                                        <div key={p} style={{ aspectRatio: '1', borderRadius: 4, overflow: 'hidden', cursor: 'pointer', border: isSel ? '2px solid rgba(255,255,255,0.65)' : '2px solid transparent', transition: 'all 0.1s' }} onClick={ev => { ev.stopPropagation(); toggleRefSelection(p); }} title="Click to add as reference">
+                                        <div
+                                            key={p}
+                                            draggable
+                                            onDragStart={ev => ev.dataTransfer.setData('application/x-perfect-idx', String(idx))}
+                                            onDragOver={ev => ev.preventDefault()}
+                                            onDrop={ev => {
+                                                ev.stopPropagation();
+                                                const fromIdx = parseInt(ev.dataTransfer.getData('application/x-perfect-idx'));
+                                                if (isNaN(fromIdx) || fromIdx === idx) return;
+                                                setPerfectImages(prev => { const next = [...prev]; const [m] = next.splice(fromIdx, 1); next.splice(idx, 0, m); return next; });
+                                            }}
+                                            className="perfect-thumb"
+                                            style={{ position: 'relative', aspectRatio: '1', borderRadius: 4, overflow: 'hidden', cursor: 'pointer', border: isSel ? '2px solid rgba(255,255,255,0.65)' : '2px solid transparent', transition: 'all 0.1s' }}
+                                            tabIndex={0}
+                                            onClick={ev => { ev.stopPropagation(); setLightboxSrc(p); }}
+                                            onKeyDown={ev => { if (ev.key === ' ') { ev.preventDefault(); setLightboxSrc(p); } if (ev.key === 'Enter') { ev.preventDefault(); toggleRefSelection(p); } }}
+                                            title="Click/Space to preview · Enter to add as ref · Drag to reorder"
+                                        >
                                             <img src={thumbUrl(p)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                                            <button onClick={ev => { ev.stopPropagation(); deletePerfectImage(p); }} className="perfect-thumb-delete" title="Remove">✕</button>
                                         </div>
                                     );
                                 })}
