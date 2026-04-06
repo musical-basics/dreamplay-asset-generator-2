@@ -788,6 +788,20 @@ export default function HomePage() {
         }
     }, [refreshCustomFolders]);
 
+    // Copy an already-on-disk file (by public path) into a folder — no re-upload needed
+    const copyToFolder = useCallback(async (folder: string, sourcePath: string) => {
+        setUploadingFolder(folder);
+        try {
+            await fetch('/api/copy-to-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sourcePath, folder }),
+            });
+            refreshCustomFolders();
+        } catch { /* ignore */ } finally {
+            setUploadingFolder(null);
+        }
+    }, [refreshCustomFolders]);
     // ─── Memoized + paginated images ──────────────────────────────────────────────
     const allVisibleImages = useMemo(() => {
         let entries: { path: string; name: string; folder: string }[] = [];
@@ -826,6 +840,7 @@ export default function HomePage() {
     // ─── Drag-and-drop to references ─────────────────────────────────────────────
     const handleDragStart = (e: React.DragEvent, path: string) => {
         e.dataTransfer.setData('imagePath', path);
+        e.dataTransfer.setData('application/x-image-path', path); // for perfect/needs-fixing drop zones
         e.dataTransfer.effectAllowed = 'copy';
     };
     const handleDropOnRefs = (e: React.DragEvent) => {
@@ -1197,7 +1212,13 @@ export default function HomePage() {
                     <div
                         onDragOver={e => { e.preventDefault(); setIsDragOverPerfect(true); }}
                         onDragLeave={() => setIsDragOverPerfect(false)}
-                        onDrop={e => { e.preventDefault(); setIsDragOverPerfect(false); if (e.dataTransfer.files.length) uploadToFolder('perfect-generations', e.dataTransfer.files); }}
+                        onDrop={e => {
+                            e.preventDefault(); setIsDragOverPerfect(false);
+                            // Support dragging from the generated-image grid (path-based drag)
+                            const jsonPath = e.dataTransfer.getData('application/x-image-path');
+                            if (jsonPath) { copyToFolder('perfect-generations', jsonPath); return; }
+                            if (e.dataTransfer.files.length) uploadToFolder('perfect-generations', e.dataTransfer.files);
+                        }}
                         style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverPerfect ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)'}`, background: isDragOverPerfect ? 'rgba(255,255,255,0.07)' : 'transparent', transition: 'all 0.15s', minHeight: perfectImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', gap: 3, padding: perfectImages.length ? 4 : 0, cursor: 'pointer' }}
                         onClick={() => !perfectImages.length && perfectInputRef.current?.click()}
                     >
@@ -1249,7 +1270,12 @@ export default function HomePage() {
                     <div
                         onDragOver={e => { e.preventDefault(); setIsDragOverNeedsFixing(true); }}
                         onDragLeave={() => setIsDragOverNeedsFixing(false)}
-                        onDrop={e => { e.preventDefault(); setIsDragOverNeedsFixing(false); if (e.dataTransfer.files.length) uploadToFolder('needs-fixing', e.dataTransfer.files); }}
+                        onDrop={e => {
+                            e.preventDefault(); setIsDragOverNeedsFixing(false);
+                            const jsonPath = e.dataTransfer.getData('application/x-image-path');
+                            if (jsonPath) { copyToFolder('needs-fixing', jsonPath); return; }
+                            if (e.dataTransfer.files.length) uploadToFolder('needs-fixing', e.dataTransfer.files);
+                        }}
                         style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverNeedsFixing ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)'}`, background: isDragOverNeedsFixing ? 'rgba(255,255,255,0.07)' : 'transparent', transition: 'all 0.15s', minHeight: needsFixingImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', gap: 3, padding: needsFixingImages.length ? 4 : 0, cursor: 'pointer' }}
                         onClick={() => !needsFixingImages.length && needsFixingInputRef.current?.click()}
                     >

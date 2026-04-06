@@ -62,8 +62,23 @@ async function loadImageAsBase64(fsPath: string): Promise<{ data: string; mimeTy
 //   03-logo-black.png         <- black logo on white bg
 //   04-logo-white.png         <- white logo on dark bg
 
-const BRAND_REF_DIR = path.join(process.cwd(), 'public', 'brand-references');
+const BRAND_REF_DIR     = path.join(process.cwd(), 'public', 'brand-references');
+const PERFECT_GEN_DIR   = path.join(process.cwd(), 'public', 'perfect-generations');
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif']);
+
+// Loads up to N images from perfect-generations/ as structural ground truth.
+// Files are sorted newest-first (by filename timestamp prefix).
+async function loadPerfectGenRefs(max = 3): Promise<{ data: string; mimeType: string }[]> {
+    if (!existsSync(PERFECT_GEN_DIR)) return [];
+    try {
+        const files = (await readdir(PERFECT_GEN_DIR))
+            .filter(f => IMAGE_EXTS.has(path.extname(f).toLowerCase()))
+            .sort().reverse() // newest first (timestamp prefix)
+            .slice(0, max);
+        const loaded = await Promise.all(files.map(f => loadImageAsBase64(path.join(PERFECT_GEN_DIR, f))));
+        return loaded.filter(Boolean) as { data: string; mimeType: string }[];
+    } catch { return []; }
+}
 
 async function loadBrandRefs(): Promise<{ data: string; mimeType: string }[]> {
     if (!existsSync(BRAND_REF_DIR)) return [];
@@ -83,25 +98,35 @@ async function loadBrandRefs(): Promise<{ data: string; mimeType: string }[]> {
 
 const DS60_MASTER_CONSTRAINT = `
 
-=== DS 6.0 REFERENCE RULES — THE FIRST IMAGES ARE GROUND TRUTH ===
+=== DS 6.0 STRUCTURAL RULES — GROUND TRUTH IMAGES ABOVE ARE THE REFERENCE ===
 
-★ PRIORITY #1 — TEXT & LOGO ACCURACY (NON-NEGOTIABLE):
-- The brand name is "DreamPlay" — spelled exactly: capital D, lowercase r-e-a-m, capital P, lowercase l-a-y. Never "Dream Play", "Dreamplay", "DREAMPlay", or any other variation.
-- Logo = circular yin-yang emblem + "Dream" (bold italic serif) + "Play" (outline stroke, never filled-in/solid). Both words must be legible and correctly spelled. Treat the logo as pixel-accurate — copy it exactly from the reference image.
-- NO extra text, taglines, serial numbers, or model numbers may appear anywhere unless explicitly in the user prompt. Text hallucination is the WORST failure mode.
-- White logo on dark backgrounds, black logo on light backgrounds. Never invert this.
-- Logo is centered above the key bed on the control panel — do not reposition it.
+The first images are PERFECT GENERATION references — study their:
+  • Camera angle, perspective, and lighting setup
+  • Exact keyboard proportions and key geometry
+  • Control panel layout: knob positions, LCD, dial, button grid
+  • Speaker grill pattern (straight parallel horizontal grooves)
+  • Overall body silhouette and depth
 
-- CAMERA ANGLE: Match the exact camera angle and perspective from the reference image by default. Only change angle if explicitly instructed in the SPECS below. Do not default to a straight front-on view if the reference shows an angled or 3/4 shot.
-- KEYBOARD: 88 keys. Black keys only in groups of 2 or 3, strictly alternating (2-gap-3-gap pattern across full width). Never equal spacing. Never 4+ in one cluster.
-- KNOBS: Exactly 2. Round flat-top rubber knobs. Same size, small gap. Top-left of control panel only.
-- LCD: 1 rectangular screen (approx 1/6 panel width). Match reference size and position. No added text or graphics.
-- CENTER DIAL: Large rotary with alternating rubber arc segments and metallic accent band. Match reference image colors — do not add gold if not shown in reference.
-- BUTTONS: 6 rectangular rubber buttons in a compact grid. Match reference colors exactly — do not add metallic accents not in reference.
-- GRILLS: Both sides — straight parallel horizontal groove lines only. Left mirrors right. No mesh or perforations.
-- GEOMETRY: Do not warp or stretch keyboard body proportions.
+━━ LOCKED (NEVER change, NEVER hallucinate) ━━━━━━━━━━━━━━━━━━━━━━━
+• KEYBOARD ANATOMY: 88 keys total. Black keys in strict alternating 2-and-3 groups only.
+  The 2-gap-3-gap pattern must repeat precisely across full width. No 4+ in one cluster.
+• KNOBS: Exactly 2 round flat-top rubber knobs, same size, small equal gap. Top-left panel only.
+• CENTER DIAL: Large rotary with alternating rubber arc segments + metallic accent band. Count segments from reference — do not add or remove.
+• BUTTON GRID: Exactly 6 rectangular rubber buttons in a 2×3 compact grid. Count from reference.
+• LCD SCREEN: 1 rectangular screen, ~1/6 panel width. Same position as reference. No invented text.
+• SPEAKER GRILLS: Both ends — straight parallel horizontal grooves only. Left mirrors right exactly. No mesh.
+• BODY PROPORTIONS: Do not stretch, widen, shorten, or warp the chassis.
+• LOGO: DreamPlay circular yin-yang emblem + "Dream" (bold italic serif) + "Play" (outline stroke). Centered on control panel above key bed. Copy pixel-accurately from reference.
+• TEXT SPELLING: Always "DreamPlay" — capital D, lowercase ream, capital P, lowercase lay. No variations. No extra text anywhere.
+
+━━ VARIABLE (apply from the SPECS below) ━━━━━━━━━━━━━━━━━━━━━━━━━
+• Key color / finish (white keys, black keys, gradient options)
+• Body / chassis color and surface material
+• Background environment and lighting color temperature
+• Logo color (white on dark, black on light — maintain contrast)
 
 ===`;
+
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
@@ -116,9 +141,10 @@ export async function POST(req: NextRequest) {
         const ai = getGoogleAI();
 
         if (modelId.startsWith('gemini-')) {
-            // 1. Load hardwired brand references (ALWAYS first)
-            const brandRefs = await loadBrandRefs();
+            // 1. Perfect-generation ground truth (ALWAYS first — structural reference)
+            const [perfectRefs, brandRefs] = await Promise.all([loadPerfectGenRefs(), loadBrandRefs()]);
             const refParts: { inlineData: { data: string; mimeType: string } }[] = [
+                ...perfectRefs.map(r => ({ inlineData: r })),
                 ...brandRefs.map(r => ({ inlineData: r })),
             ];
 
@@ -165,6 +191,7 @@ export async function POST(req: NextRequest) {
 
             console.log(
                 '[generate-image] prompt len:', fullPrompt.length,
+                '| perfect refs:', perfectRefs.length,
                 '| brand refs:', brandRefs.length,
                 '| user refs:', refImagePaths?.length ?? 0,
                 '| base:', !!baseImageBase64,
