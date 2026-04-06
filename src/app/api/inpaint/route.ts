@@ -124,13 +124,57 @@ export async function POST(req: NextRequest) {
             config: { responseModalities: ['image', 'text'] },
         }));
 
-        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        const imagePart = response.candidates?.[0]?.content?.parts?.find((p: { inlineData?: unknown }) => p.inlineData);
         if (imagePart?.inlineData) {
-            return NextResponse.json({
-                success: true,
-                base64: imagePart.inlineData.data,
-                mimeType: imagePart.inlineData.mimeType,
-            });
+            const { data: aiData, mimeType: aiMime } = imagePart.inlineData as { data: string; mimeType: string };
+
+            // ── Pixel-exact zone isolation via sharp compositing ──────────────
+            // Regardless of what Gemini modified outside the selection, we paste
+            // the ORIGINAL pixels back over every black (non-selected) region.
+            // This makes the marquee box a true hard guardrail.
+            try {
+                const sharp = (await import('sharp')).default;
+                const origBuf   = Buffer.from(imageBase64, 'base64');
+                const aiBuf     = Buffer.from(aiData, 'base64');
+                const maskBuf   = Buffer.from(maskBase64, 'base64');
+
+                // Normalise everything to PNG RGBA at the same size as the original
+                const { width, height } = await sharp(origBuf).metadata();
+                const [origRaw, aiRaw, maskRaw] = await Promise.all([
+                    sharp(origBuf).resize(width, height).ensureAlpha().raw().toBuffer(),
+                    sharp(aiBuf).resize(width, height).ensureAlpha().raw().toBuffer(),
+                    // Mask is greyscale: threshold so anything ≥128 = edit zone (white)
+                    sharp(maskBuf).resize(width, height).greyscale().raw().toBuffer(),
+                ]);
+
+                // Composite: for each pixel, if mask value < 128 (black = preserve),
+                // copy original RGBA; otherwise keep Gemini's RGBA.
+                const pixels = width! * height!;
+                const out = Buffer.alloc(pixels * 4);
+                for (let i = 0; i < pixels; i++) {
+                    const isEdited = maskRaw[i] >= 128;
+                    const src = isEdited ? aiRaw : origRaw;
+                    out[i * 4]     = src[i * 4];
+                    out[i * 4 + 1] = src[i * 4 + 1];
+                    out[i * 4 + 2] = src[i * 4 + 2];
+                    out[i * 4 + 3] = src[i * 4 + 3];
+                }
+
+                const composited = await sharp(out, { raw: { width: width!, height: height!, channels: 4 } })
+                    .png()
+                    .toBuffer();
+
+                console.log('[inpaint] Compositing complete — zone isolation enforced');
+                return NextResponse.json({
+                    success: true,
+                    base64: composited.toString('base64'),
+                    mimeType: 'image/png',
+                });
+            } catch (sharpErr) {
+                // If compositing fails for any reason, fall back to raw Gemini output
+                console.warn('[inpaint] sharp composite failed, returning raw Gemini output:', sharpErr);
+                return NextResponse.json({ success: true, base64: aiData, mimeType: aiMime });
+            }
         }
 
         return NextResponse.json({ error: 'No image returned from Gemini' }, { status: 500 });
