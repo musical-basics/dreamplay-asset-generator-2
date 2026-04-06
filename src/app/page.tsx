@@ -1127,8 +1127,8 @@ export default function HomePage() {
                             disabled={indexing}
                             title="Re-index all product images into SQLite catalog"
                             style={{ fontSize: '0.54rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: 4,
-                                background: indexing ? 'rgba(255,255,255,0.06)' : 'rgba(201,168,76,0.15)',
-                                border: '1px solid rgba(201,168,76,0.3)', color: 'var(--gold)',
+                                background: indexing ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.1)',
+                                border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.85)',
                                 cursor: indexing ? 'default' : 'pointer', letterSpacing: '0.04em' }}
                         >
                             {indexing ? (
@@ -1155,7 +1155,7 @@ export default function HomePage() {
                     <input ref={needsFixingInputRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files && uploadToFolder('needs-fixing', e.target.files)} />
 
                     {/* Perfect Generations */}
-                    <div className="left-panel-section" style={{ color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div className="left-panel-section" style={{ color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                             {/* checkmark.seal — SF Symbol style */}
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1164,13 +1164,13 @@ export default function HomePage() {
                             </svg>
                             Perfect (Ground Truth)
                         </span>
-                        <button onClick={() => perfectInputRef.current?.click()} style={{ fontSize: '0.56rem', padding: '0.1rem 0.4rem', borderRadius: 3, border: '1px solid rgba(201,168,76,0.35)', background: 'rgba(201,168,76,0.1)', color: 'var(--gold)', cursor: 'pointer' }}>+ Upload</button>
+                        <button onClick={() => perfectInputRef.current?.click()} style={{ fontSize: '0.56rem', padding: '0.1rem 0.4rem', borderRadius: 3, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.75)', cursor: 'pointer' }}>+ Upload</button>
                     </div>
                     <div
                         onDragOver={e => { e.preventDefault(); setIsDragOverPerfect(true); }}
                         onDragLeave={() => setIsDragOverPerfect(false)}
                         onDrop={e => { e.preventDefault(); setIsDragOverPerfect(false); if (e.dataTransfer.files.length) uploadToFolder('perfect-generations', e.dataTransfer.files); }}
-                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverPerfect ? 'var(--gold)' : 'rgba(201,168,76,0.25)'}`, background: isDragOverPerfect ? 'rgba(201,168,76,0.06)' : 'transparent', transition: 'all 0.15s', minHeight: perfectImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', gap: 3, padding: perfectImages.length ? 4 : 0, cursor: 'pointer' }}
+                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverPerfect ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)'}`, background: isDragOverPerfect ? 'rgba(255,255,255,0.07)' : 'transparent', transition: 'all 0.15s', minHeight: perfectImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', gap: 3, padding: perfectImages.length ? 4 : 0, cursor: 'pointer' }}
                         onClick={() => !perfectImages.length && perfectInputRef.current?.click()}
                     >
                         {perfectImages.length === 0 ? (
@@ -1194,7 +1194,7 @@ export default function HomePage() {
                                 {perfectImages.map(p => {
                                     const isSel = selectedRefPaths.includes(p);
                                     return (
-                                        <div key={p} style={{ aspectRatio: '1', borderRadius: 4, overflow: 'hidden', cursor: 'pointer', border: isSel ? '2px solid var(--gold)' : '2px solid transparent', transition: 'all 0.1s' }} onClick={ev => { ev.stopPropagation(); toggleRefSelection(p); }} title="Click to add as reference">
+                                        <div key={p} style={{ aspectRatio: '1', borderRadius: 4, overflow: 'hidden', cursor: 'pointer', border: isSel ? '2px solid rgba(255,255,255,0.65)' : '2px solid transparent', transition: 'all 0.1s' }} onClick={ev => { ev.stopPropagation(); toggleRefSelection(p); }} title="Click to add as reference">
                                             <img src={thumbUrl(p)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                                         </div>
                                     );
@@ -1204,7 +1204,7 @@ export default function HomePage() {
                     </div>
 
                     {/* Needs Fixing */}
-                    <div className="left-panel-section" style={{ color: '#ffb340', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div className="left-panel-section" style={{ color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                             {/* wand.and.stars — SF Symbol style */}
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1216,13 +1216,13 @@ export default function HomePage() {
                             </svg>
                             Needs Fixing
                         </span>
-                        <button onClick={() => needsFixingInputRef.current?.click()} style={{ fontSize: '0.56rem', padding: '0.1rem 0.4rem', borderRadius: 3, border: '1px solid rgba(255,179,64,0.35)', background: 'rgba(255,179,64,0.08)', color: '#ffb340', cursor: 'pointer' }}>+ Upload</button>
+                        <button onClick={() => needsFixingInputRef.current?.click()} style={{ fontSize: '0.56rem', padding: '0.1rem 0.4rem', borderRadius: 3, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.75)', cursor: 'pointer' }}>+ Upload</button>
                     </div>
                     <div
                         onDragOver={e => { e.preventDefault(); setIsDragOverNeedsFixing(true); }}
                         onDragLeave={() => setIsDragOverNeedsFixing(false)}
                         onDrop={e => { e.preventDefault(); setIsDragOverNeedsFixing(false); if (e.dataTransfer.files.length) uploadToFolder('needs-fixing', e.dataTransfer.files); }}
-                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverNeedsFixing ? '#ffb340' : 'rgba(255,179,64,0.2)'}`, background: isDragOverNeedsFixing ? 'rgba(255,179,64,0.05)' : 'transparent', transition: 'all 0.15s', minHeight: needsFixingImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', gap: 3, padding: needsFixingImages.length ? 4 : 0, cursor: 'pointer' }}
+                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverNeedsFixing ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)'}`, background: isDragOverNeedsFixing ? 'rgba(255,255,255,0.07)' : 'transparent', transition: 'all 0.15s', minHeight: needsFixingImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', gap: 3, padding: needsFixingImages.length ? 4 : 0, cursor: 'pointer' }}
                         onClick={() => !needsFixingImages.length && needsFixingInputRef.current?.click()}
                     >
                         {needsFixingImages.length === 0 ? (

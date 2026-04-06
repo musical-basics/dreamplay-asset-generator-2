@@ -24,11 +24,11 @@
   /* Star gold — only for ratings */
   --star-gold: #f5c518;
 
-  /* Legacy aliases (so existing refs still resolve) */
-  --gold: var(--accent);
-  --gold-light: var(--accent-light);
-  --gold-dim: var(--accent-dim);
-  --gold-glow: var(--accent-glow);
+  /* Legacy aliases — now neutral white (no yellow/gold anywhere) */
+  --gold: rgba(255, 255, 255, 0.82);
+  --gold-light: rgba(255, 255, 255, 0.95);
+  --gold-dim: rgba(255, 255, 255, 0.5);
+  --gold-glow: rgba(255, 255, 255, 0.08);
 
   --text-primary: rgba(255, 255, 255, 0.88);
   --text-secondary: rgba(255, 255, 255, 0.5);
@@ -352,7 +352,7 @@ select {
 }
 
 .folder-row.active .folder-count {
-  background: rgba(201, 168, 76, 0.2);
+  background: rgba(255, 255, 255, 0.15);
   color: var(--gold);
 }
 
@@ -591,8 +591,8 @@ select {
 }
 
 .model-row.selected {
-  background: rgba(201, 168, 76, 0.12);
-  border-color: rgba(201, 168, 76, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .model-dot {
@@ -606,7 +606,7 @@ select {
 
 .model-row.selected .model-dot {
   background: var(--gold);
-  box-shadow: 0 0 5px rgba(201, 168, 76, 0.6);
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.35);
 }
 
 .model-row-name {
@@ -645,9 +645,9 @@ select {
 }
 
 .mbadge.video {
-  background: rgba(201, 168, 76, 0.1);
+  background: rgba(255, 255, 255, 0.09);
   color: var(--gold);
-  border: 1px solid rgba(201, 168, 76, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .mbadge.img {
@@ -722,9 +722,9 @@ select {
 }
 
 .fmt-type.video {
-  background: rgba(201, 168, 76, 0.1);
+  background: rgba(255, 255, 255, 0.09);
   color: var(--gold);
-  border: 1px solid rgba(201, 168, 76, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .select-all-btn {
@@ -771,7 +771,7 @@ select {
 
 .lr-textarea:focus {
   outline: none;
-  border-color: rgba(201, 168, 76, 0.4);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .lr-textarea::placeholder {
@@ -779,8 +779,8 @@ select {
 }
 
 .enhanced-box {
-  background: rgba(201, 168, 76, 0.06);
-  border: 1px solid rgba(201, 168, 76, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-sm);
   padding: 0.6rem 0.75rem;
   font-size: 0.7rem;
@@ -824,13 +824,13 @@ select {
 }
 
 .brand-tag:hover {
-  border-color: rgba(201, 168, 76, 0.3);
+  border-color: rgba(255, 255, 255, 0.2);
   color: var(--gold);
 }
 
 .brand-tag.active {
-  background: rgba(201, 168, 76, 0.15);
-  border-color: rgba(201, 168, 76, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
   color: var(--gold-light);
 }
 
@@ -858,7 +858,7 @@ select {
 }
 
 .btn-gold:hover {
-  box-shadow: 0 2px 16px rgba(201, 168, 76, 0.3);
+  box-shadow: 0 2px 16px rgba(255, 255, 255, 0.2);
 }
 
 .btn-gold:disabled {
@@ -877,7 +877,7 @@ select {
 
 .btn-ghost:hover {
   color: var(--gold);
-  border-color: rgba(201, 168, 76, 0.3);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .btn-sm {
@@ -912,7 +912,7 @@ select {
 .spinner {
   width: 10px;
   height: 10px;
-  border: 2px solid rgba(201, 168, 76, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.15);
   border-top-color: var(--gold);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
@@ -1142,8 +1142,8 @@ select {
 
 /* API Key banner */
 .api-banner {
-  background: rgba(201, 168, 76, 0.08);
-  border-bottom: 1px solid rgba(201, 168, 76, 0.2);
+  background: rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   padding: 0.5rem 1rem;
   display: flex;
   align-items: center;
@@ -1172,7 +1172,7 @@ select {
 .api-key-input {
   flex: 1;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(201, 168, 76, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   padding: 0.35rem 0.65rem;
@@ -1215,7 +1215,7 @@ select {
 
 .input-field:focus {
   outline: none;
-  border-color: rgba(201, 168, 76, 0.35);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .input-field::placeholder {
@@ -1654,7 +1654,7 @@ select {
 
 .cull-comment-input:focus {
   outline: none;
-  border-color: rgba(201, 168, 76, 0.3);
+  border-color: rgba(255, 255, 255, 0.2);
   color: var(--text-primary);
 }
 
