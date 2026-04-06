@@ -467,7 +467,7 @@ export default function HomePage() {
                     let res: Response;
                     try {
                         res = await fetch(
-                                MODEL_OPTIONS.find(m => m.apiModel === newJob.modelId)?.provider === 'xai'
+                                newJob.modelId.startsWith('grok')
                                     ? '/api/generate-image-aurora'
                                     : '/api/generate-image',
                                 {
