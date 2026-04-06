@@ -60,6 +60,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields: imageBase64, maskBase64, prompt, modelId' }, { status: 400 });
         }
 
+        // Ensure the selected model supports image output
+        const modelOption = MODEL_OPTIONS.find(m => m.id === modelId || m.apiModel === modelId);
+        if (modelOption && modelOption.type !== 'image') {
+            return NextResponse.json({
+                error: `"${modelOption.name}" doesn't support image generation. Please switch to an image model (e.g. Gemini 3.1 Flash Image) in the model selector.`
+            }, { status: 400 });
+        }
+
         if (!modelId.startsWith('gemini-')) {
             return NextResponse.json({ error: 'Inpainting requires a Gemini model' }, { status: 400 });
         }

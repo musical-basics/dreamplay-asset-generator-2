@@ -2220,11 +2220,14 @@ export default function HomePage() {
             // Extract raw base64 from the data URL
             const [header, b64] = maskEditorJob.resultUrl.split(',');
             const mimeType = header.replace('data:', '').replace(';base64', '');
+            // Ensure we always use an image-capable model in the MaskEditor
+            const jobModelOpt = MODEL_OPTIONS.find(m => m.id === maskEditorJob.modelId || m.apiModel === maskEditorJob.modelId);
+            const editorModelId = (jobModelOpt?.type === 'image') ? maskEditorJob.modelId : 'gemini-flash-image-31';
             return (
                 <MaskEditor
                     imageBase64={b64}
                     imageMimeType={mimeType}
-                    modelId={maskEditorJob.modelId}
+                    modelId={editorModelId}
                     formatLabel={maskEditorJob.formatLabel}
                     onResult={(base64, mime) => {
                         const resultUrl = `data:${mime};base64,${base64}`;
