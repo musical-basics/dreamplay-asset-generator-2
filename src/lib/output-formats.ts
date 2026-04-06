@@ -448,6 +448,18 @@ export const MODEL_OPTIONS: ModelOption[] = [
         creditCost: 'Free tier: very generous',
         apiModel: 'gemini-2.0-flash',
     },
+    {
+        id: 'xai-aurora',
+        name: 'xAI Aurora ✦ Grok',
+        provider: 'xai',
+        type: 'image',
+        tier: 'free',
+        quality: 'balanced',
+        description: 'xAI\'s Aurora image generation model. Strong photorealism and creative composition. Uses your xAI API key. Good alternative to Gemini for lifestyle and talent shots.',
+        bestFor: ['Lifestyle shots', 'Talent scenes', 'Creative compositions', 'Variety'],
+        creditCost: 'xAI API key required',
+        apiModel: 'aurora',
+    },
 ];
 
 export const CATEGORY_LABELS: Record<string, string> = {

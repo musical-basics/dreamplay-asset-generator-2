@@ -466,16 +466,21 @@ export default function HomePage() {
                 try {
                     let res: Response;
                     try {
-                        res = await fetch('/api/generate-image', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                                prompt: newJob.prompt, modelId: newJob.modelId,
-                                aspectRatio: fmt.aspectRatio,
-                                refImagePaths: selectedRefPaths,
-                                roleRefs,
-                                brandSuffix: brandSuffix ?? undefined,
-                            }),
-                        });
+                        res = await fetch(
+                                newJob.modelId === 'xai-aurora'
+                                    ? '/api/generate-image-aurora'
+                                    : '/api/generate-image',
+                                {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        prompt: newJob.prompt, modelId: newJob.modelId,
+                                        aspectRatio: fmt.aspectRatio,
+                                        refImagePaths: selectedRefPaths,
+                                        roleRefs,
+                                        brandSuffix: brandSuffix ?? undefined,
+                                    }),
+                                }
+                            );
                     } catch {
                         throw new Error('Server unreachable — make sure the dev server is running on port 3000');
                     }
