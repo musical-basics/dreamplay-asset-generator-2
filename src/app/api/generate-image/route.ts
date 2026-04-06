@@ -3,6 +3,15 @@ import { getGoogleAI } from '@/lib/google-ai';
 import { readFile, readdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { MODEL_OPTIONS } from '@/lib/output-formats';
+
+// ─── Model alias resolution ────────────────────────────────────────────────────
+// Translates internal UI model IDs (e.g. 'gemini-flash-image-31') to the real
+// Gemini API model strings (e.g. 'gemini-3.1-flash-image-preview').
+function resolveModelId(id: string): string {
+    const found = MODEL_OPTIONS.find(m => m.id === id);
+    return found?.apiModel ?? id;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -144,7 +153,7 @@ export async function POST(req: NextRequest) {
             );
 
             const response = await ai.models.generateContent({
-                model: modelId,
+                model: resolveModelId(modelId),
                 contents: [{ role: 'user', parts: [...refParts, { text: fullPrompt }] }],
                 config: {
                     responseModalities: ['image', 'text'],
@@ -166,7 +175,7 @@ export async function POST(req: NextRequest) {
         } else {
             // Imagen (text-to-image only)
             const response = await ai.models.generateImages({
-                model: modelId,
+                model: resolveModelId(modelId),
                 prompt,
                 config: {
                     numberOfImages: 1,

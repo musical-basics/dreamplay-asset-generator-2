@@ -4,6 +4,13 @@ import { readdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { readFile } from 'fs/promises';
+import { MODEL_OPTIONS } from '@/lib/output-formats';
+
+// ─── Model alias resolution ───────────────────────────────────────────────────
+function resolveModelId(id: string): string {
+    const found = MODEL_OPTIONS.find(m => m.id === id);
+    return found?.apiModel ?? id;
+}
 
 const BRAND_REF_DIR = path.join(process.cwd(), 'public', 'brand-references');
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif']);
@@ -84,7 +91,7 @@ export async function POST(req: NextRequest) {
         console.log('[inpaint] zone:', zoneLabel, '| prompt len:', inpaintPrompt.length, '| brand refs:', brandRefs.length);
 
         const response = await ai.models.generateContent({
-            model: modelId,
+            model: resolveModelId(modelId),
             contents: [{ role: 'user', parts: [...parts, { text: inpaintPrompt }] }],
             config: { responseModalities: ['image', 'text'] },
         });
