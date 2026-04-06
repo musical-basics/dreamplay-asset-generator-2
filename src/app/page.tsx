@@ -152,6 +152,11 @@ export default function HomePage() {
     // ── Custom Folders (Reuploaded Workflow) ────────────────────
     const [perfectImages, setPerfectImages] = useState<string[]>([]);
     const [needsFixingImages, setNeedsFixingImages] = useState<string[]>([]);
+    const [uploadingFolder, setUploadingFolder] = useState<string | null>(null);
+    const [isDragOverPerfect, setIsDragOverPerfect] = useState(false);
+    const [isDragOverNeedsFixing, setIsDragOverNeedsFixing] = useState(false);
+    const perfectInputRef = useRef<HTMLInputElement>(null);
+    const needsFixingInputRef = useRef<HTMLInputElement>(null);
 
     // ── Prompt preset toggles ───────────────────────────────────
     const [useStarterPreset, setUseStarterPreset] = useState(false);
@@ -738,6 +743,31 @@ export default function HomePage() {
             .catch(() => { });
     }, []);
 
+    const refreshCustomFolders = useCallback(() => {
+        fetch('/api/custom-folders')
+            .then(r => r.json())
+            .then(data => {
+                if (data.perfectGenerations) setPerfectImages(data.perfectGenerations);
+                if (data.needsFixing) setNeedsFixingImages(data.needsFixing);
+            })
+            .catch(() => { });
+    }, []);
+
+    const uploadToFolder = useCallback(async (folder: string, files: FileList | File[]) => {
+        const fileArr = Array.from(files);
+        if (!fileArr.length) return;
+        setUploadingFolder(folder);
+        try {
+            const fd = new FormData();
+            fd.append('folder', folder);
+            fileArr.forEach(f => fd.append('files', f));
+            await fetch('/api/upload-to-folder', { method: 'POST', body: fd });
+            refreshCustomFolders();
+        } catch { /* ignore */ } finally {
+            setUploadingFolder(null);
+        }
+    }, [refreshCustomFolders]);
+
     // ─── Memoized + paginated images ──────────────────────────────────────────────
     const allVisibleImages = useMemo(() => {
         let entries: { path: string; name: string; folder: string }[] = [];
@@ -1107,38 +1137,69 @@ export default function HomePage() {
                     {indexMsg && <div style={{ fontSize: '0.6rem', color: 'var(--accent-green)', padding: '0.25rem 0.75rem', background: 'rgba(48,209,88,0.08)', borderBottom: '1px solid rgba(48,209,88,0.15)' }}>{indexMsg}</div>}
                     
                     {/* ── REUPLOADED WORKFLOW ── */}
-                    {perfectImages.length > 0 && (
-                        <>
-                            <div className="left-panel-section" style={{ color: 'var(--gold)' }}>Perfect Generations (Ground Truth)</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3, padding: '0.1rem 0.6rem 0.5rem' }}>
-                                {perfectImages.map(path => {
-                                    const isSel = selectedRefPaths.includes(path);
+                    {/* Hidden file inputs */}
+                    <input ref={perfectInputRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files && uploadToFolder('perfect-generations', e.target.files)} />
+                    <input ref={needsFixingInputRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files && uploadToFolder('needs-fixing', e.target.files)} />
+
+                    {/* Perfect Generations */}
+                    <div className="left-panel-section" style={{ color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>⭐ Perfect (Ground Truth)</span>
+                        <button onClick={() => perfectInputRef.current?.click()} style={{ fontSize: '0.56rem', padding: '0.1rem 0.4rem', borderRadius: 3, border: '1px solid rgba(201,168,76,0.35)', background: 'rgba(201,168,76,0.1)', color: 'var(--gold)', cursor: 'pointer' }}>+ Upload</button>
+                    </div>
+                    <div
+                        onDragOver={e => { e.preventDefault(); setIsDragOverPerfect(true); }}
+                        onDragLeave={() => setIsDragOverPerfect(false)}
+                        onDrop={e => { e.preventDefault(); setIsDragOverPerfect(false); if (e.dataTransfer.files.length) uploadToFolder('perfect-generations', e.dataTransfer.files); }}
+                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverPerfect ? 'var(--gold)' : 'rgba(201,168,76,0.25)'}`, background: isDragOverPerfect ? 'rgba(201,168,76,0.06)' : 'transparent', transition: 'all 0.15s', minHeight: perfectImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', gap: 3, padding: perfectImages.length ? 4 : 0, cursor: 'pointer' }}
+                        onClick={() => !perfectImages.length && perfectInputRef.current?.click()}
+                    >
+                        {perfectImages.length === 0 ? (
+                            <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.85rem 0', width: '100%' }}>
+                                {uploadingFolder === 'perfect-generations' ? '⏳ Uploading…' : '⬆ Drop or click to upload'}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
+                                {perfectImages.map(p => {
+                                    const isSel = selectedRefPaths.includes(p);
                                     return (
-                                        <div key={path} style={{ aspectRatio: '1', borderRadius: 4, overflow: 'hidden', cursor: 'pointer', border: isSel ? '2px solid var(--gold)' : '2px solid transparent', transition: 'all 0.1s' }} onClick={() => toggleRefSelection(path)} title="Add to references">
-                                            <img src={thumbUrl(path)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                                        <div key={p} style={{ aspectRatio: '1', borderRadius: 4, overflow: 'hidden', cursor: 'pointer', border: isSel ? '2px solid var(--gold)' : '2px solid transparent', transition: 'all 0.1s' }} onClick={ev => { ev.stopPropagation(); toggleRefSelection(p); }} title="Click to add as reference">
+                                            <img src={thumbUrl(p)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                                         </div>
                                     );
                                 })}
                             </div>
-                        </>
-                    )}
-                    {needsFixingImages.length > 0 && (
-                        <>
-                            <div className="left-panel-section" style={{ color: '#ffb340' }}>Needs Fixing (Reuploaded)</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3, padding: '0.1rem 0.6rem 0.5rem' }}>
-                                {needsFixingImages.map(path => (
-                                    <div key={path} className="output-thumb-wrap" style={{ border: '1px solid rgba(255, 179, 64, 0.4)' }} onClick={async () => {
-                                        // Load the saved image from disk as base64 for MaskEditor
+                        )}
+                    </div>
+
+                    {/* Needs Fixing */}
+                    <div className="left-panel-section" style={{ color: '#ffb340', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>🎭 Needs Fixing</span>
+                        <button onClick={() => needsFixingInputRef.current?.click()} style={{ fontSize: '0.56rem', padding: '0.1rem 0.4rem', borderRadius: 3, border: '1px solid rgba(255,179,64,0.35)', background: 'rgba(255,179,64,0.08)', color: '#ffb340', cursor: 'pointer' }}>+ Upload</button>
+                    </div>
+                    <div
+                        onDragOver={e => { e.preventDefault(); setIsDragOverNeedsFixing(true); }}
+                        onDragLeave={() => setIsDragOverNeedsFixing(false)}
+                        onDrop={e => { e.preventDefault(); setIsDragOverNeedsFixing(false); if (e.dataTransfer.files.length) uploadToFolder('needs-fixing', e.dataTransfer.files); }}
+                        style={{ margin: '0 0.5rem 0.5rem', borderRadius: 6, border: `1.5px dashed ${isDragOverNeedsFixing ? '#ffb340' : 'rgba(255,179,64,0.2)'}`, background: isDragOverNeedsFixing ? 'rgba(255,179,64,0.05)' : 'transparent', transition: 'all 0.15s', minHeight: needsFixingImages.length ? undefined : 52, display: 'flex', flexDirection: 'column', gap: 3, padding: needsFixingImages.length ? 4 : 0, cursor: 'pointer' }}
+                        onClick={() => !needsFixingImages.length && needsFixingInputRef.current?.click()}
+                    >
+                        {needsFixingImages.length === 0 ? (
+                            <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.85rem 0', width: '100%' }}>
+                                {uploadingFolder === 'needs-fixing' ? '⏳ Uploading…' : '⬆ Drop or click to upload'}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
+                                {needsFixingImages.map(p => (
+                                    <div key={p} className="output-thumb-wrap" style={{ border: '1px solid rgba(255,179,64,0.4)' }} onClick={async ev => {
+                                        ev.stopPropagation();
                                         try {
-                                            const imgRes = await fetch(path);
+                                            const imgRes = await fetch(p);
                                             const blob = await imgRes.blob();
                                             const reader = new FileReader();
                                             reader.onload = () => {
                                                 const dataUrl = reader.result as string;
-                                                const [hdr, b64] = dataUrl.split(',');
-                                                const mime = hdr.replace('data:', '').replace(';base64', '');
                                                 setMaskEditorJob({
-                                                    id: `fix-${path}`,
+                                                    id: `fix-${p}`,
                                                     batchId: '',
                                                     status: 'done',
                                                     formatId: 'fix',
@@ -1153,14 +1214,14 @@ export default function HomePage() {
                                             };
                                             reader.readAsDataURL(blob);
                                         } catch { /* ignore */ }
-                                    }} title="Open Mask & Fix editor">
-                                        <img src={thumbUrl(path)} alt="" className="output-thumb" loading="lazy" />
-                                        <div className="output-thumb-mask" style={{ opacity: 1, background: 'rgba(255, 179, 64, 0.8)' }}>🎭</div>
+                                    }} title="Click to open in Mask Editor">
+                                        <img src={thumbUrl(p)} alt="" className="output-thumb" loading="lazy" />
+                                        <div className="output-thumb-mask" style={{ opacity: 1, background: 'rgba(255,179,64,0.8)' }}>🎭</div>
                                     </div>
                                 ))}
                             </div>
-                        </>
-                    )}
+                        )}
+                    </div>
 
                     <div className="folder-tree">
                         {isLoadingLibrary ? (
