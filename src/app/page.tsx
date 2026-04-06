@@ -1131,7 +1131,20 @@ export default function HomePage() {
                                 border: '1px solid rgba(201,168,76,0.3)', color: 'var(--gold)',
                                 cursor: indexing ? 'default' : 'pointer', letterSpacing: '0.04em' }}
                         >
-                            {indexing ? '⏳' : '⚡ Index'}
+                            {indexing ? (
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                                    <path d="M12 2a10 10 0 0 1 0 20" opacity="0.25"/>
+                                    <path d="M12 2a10 10 0 0 1 10 10"/>
+                                </svg>
+                            ) : (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="23 4 23 10 17 10"/>
+                                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                                    </svg>
+                                    Index
+                                </span>
+                            )}
                         </button>
                     </div>
                     {indexMsg && <div style={{ fontSize: '0.6rem', color: 'var(--accent-green)', padding: '0.25rem 0.75rem', background: 'rgba(48,209,88,0.08)', borderBottom: '1px solid rgba(48,209,88,0.15)' }}>{indexMsg}</div>}
