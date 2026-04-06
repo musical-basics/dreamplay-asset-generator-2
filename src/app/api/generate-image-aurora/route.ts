@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
         const priorityText = prioritySuffix ? ` ${prioritySuffix}` : '';
 
         // Hard brand guardrail
-        const guardrail = ' NEVER include yin-yang symbols in any form.';
+        const guardrail = ' ⛔ HARD BANS: (1) ZERO yin-yang symbols anywhere in the image under any circumstances — not as decor, prop, logo, shadow, or pattern. (2) Piano/keyboard orientation: bass keys (low, larger) always on the LEFT, treble keys (high) always on the RIGHT, control panel on the RIGHT end — never mirrored or flipped. (3) No unauthorized text or watermarks.';
 
         const fullPrompt = prompt + ratioHint + roleRefText + brandText + priorityText + guardrail;
 

@@ -98,6 +98,12 @@ async function loadBrandRefs(): Promise<{ data: string; mimeType: string }[]> {
 
 const DS60_MASTER_CONSTRAINT = `
 
+⛔⛔⛔ PREFLIGHT HARD BANS — CHECK THESE FIRST BEFORE RENDERING ANYTHING:
+1. ZERO yin-yang symbols anywhere — not as logo, decor, background prop, shadow, pattern, or abstract shape. If any element resembles a yin-yang, replace it with empty space.
+2. PIANO ORIENTATION: Low keys (bass, larger white keys) are ALWAYS on the LEFT side of the frame. High keys (treble, smaller white keys) are ALWAYS on the RIGHT. The control panel (knobs, LCD, buttons) is on the RIGHT end. NEVER mirror/flip/reverse this — a reversed piano is an automatic failure.
+3. NEVER add text, watermarks, or labels that are not explicitly in the prompt.
+⛔⛔⛔
+
 === DS 6.0 STRUCTURAL RULES — GROUND TRUTH IMAGES ABOVE ARE THE REFERENCE ===
 
 The first images are PERFECT GENERATION references — study their:
@@ -116,12 +122,9 @@ The first images are PERFECT GENERATION references — study their:
 • LCD SCREEN: 1 rectangular screen, ~1/6 panel width. Same position as reference. No invented text.
 • SPEAKER GRILLS: Both ends — straight parallel horizontal grooves only. Left mirrors right exactly. No mesh.
 • BODY PROPORTIONS: Do not stretch, widen, shorten, or warp the chassis.
-• LOGO: DreamPlay branded circular emblem (two-tone interlocking swirl shape — do NOT render as a generic yin-yang symbol) + "Dream" (bold italic serif) + "Play" (outline stroke). Centered on control panel above key bed. Copy the exact design from the reference image.
+• LOGO: DreamPlay branded circular emblem (two-tone interlocking swirl shape — absolutely NOT a yin-yang symbol) + "Dream" (bold italic serif) + "Play" (outline stroke). Centered on control panel above key bed. Copy exact design from reference.
 • TEXT SPELLING: Always "DreamPlay" — capital D, lowercase ream, capital P, lowercase lay. No variations. No extra text anywhere.
-
-⛔ ABSOLUTE HARD BANS — Never under any circumstances:
-• NEVER generate a yin-yang symbol anywhere in the image (not as decor, logo interpretation, background element, or pattern)
-• NEVER add text, watermarks, or labels that are not in the prompt
+• ORIENTATION: Repeat — bass keys LEFT, treble keys RIGHT, control panel RIGHT end. Never flipped.
 
 ━━ VARIABLE (apply from the SPECS below) ━━━━━━━━━━━━━━━━━━━━━━━━━
 • Key color / finish (white keys, black keys, gradient options)
