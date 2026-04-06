@@ -2007,10 +2007,25 @@ select {
 .perfect-thumb { position: relative; }
 
 .perfect-thumb .perfect-thumb-delete {
-  opacity: 0.35 !important;
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  font-size: 0.55rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  line-height: 1;
 }
 .perfect-thumb:hover .perfect-thumb-delete {
-  opacity: 1 !important;
+  opacity: 1;
 }
 
 .perfect-thumb::before {

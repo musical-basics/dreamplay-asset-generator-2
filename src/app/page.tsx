@@ -1299,9 +1299,9 @@ export default function HomePage() {
                                             className="perfect-thumb"
                                             style={{ position: 'relative', aspectRatio: '1', borderRadius: 4, overflow: 'hidden', cursor: 'pointer', border: isSel ? '2px solid rgba(255,255,255,0.65)' : '2px solid transparent', transition: 'all 0.1s' }}
                                             tabIndex={0}
-                                            onClick={ev => { ev.stopPropagation(); setLightboxSrc(p); }}
+                                            onClick={ev => { ev.stopPropagation(); toggleRefSelection(p); }}
                                             onKeyDown={ev => { if (ev.key === ' ') { ev.preventDefault(); setLightboxSrc(p); } if (ev.key === 'Enter') { ev.preventDefault(); toggleRefSelection(p); } }}
-                                            title="Click/Space to preview · Enter to add as ref · Drag to reorder"
+                                            title="Click/Enter to select as ref · Space to preview · Drag to reorder"
                                         >
                                             <img src={thumbUrl(p)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                                             <button onClick={ev => { ev.stopPropagation(); deletePerfectImage(p); }} className="perfect-thumb-delete" title="Remove">✕</button>
