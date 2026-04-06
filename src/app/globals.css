@@ -849,8 +849,8 @@ select {
 }
 
 .btn-gold {
-  background: linear-gradient(135deg, var(--gold-dim), var(--gold-light));
-  color: #09090e;
+  background: linear-gradient(135deg, #0071e3, #0077ed);
+  color: #fff;
   font-weight: 700;
   width: 100%;
   justify-content: center;
@@ -858,7 +858,7 @@ select {
 }
 
 .btn-gold:hover {
-  box-shadow: 0 2px 16px rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 16px rgba(0, 113, 227, 0.45);
 }
 
 .btn-gold:disabled {
