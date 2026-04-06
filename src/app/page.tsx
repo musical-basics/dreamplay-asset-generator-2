@@ -1143,7 +1143,14 @@ export default function HomePage() {
 
                     {/* Perfect Generations */}
                     <div className="left-panel-section" style={{ color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span>⭐ Perfect (Ground Truth)</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            {/* checkmark.seal — SF Symbol style */}
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 2l2.4 4.6 5.1.7-3.7 3.6.9 5.1L12 14l-4.7 2.4.9-5.1L4.5 7.7l5.1-.7z"/>
+                                <polyline points="9 12 11 14 15 10"/>
+                            </svg>
+                            Perfect (Ground Truth)
+                        </span>
                         <button onClick={() => perfectInputRef.current?.click()} style={{ fontSize: '0.56rem', padding: '0.1rem 0.4rem', borderRadius: 3, border: '1px solid rgba(201,168,76,0.35)', background: 'rgba(201,168,76,0.1)', color: 'var(--gold)', cursor: 'pointer' }}>+ Upload</button>
                     </div>
                     <div
@@ -1154,8 +1161,20 @@ export default function HomePage() {
                         onClick={() => !perfectImages.length && perfectInputRef.current?.click()}
                     >
                         {perfectImages.length === 0 ? (
-                            <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.85rem 0', width: '100%' }}>
-                                {uploadingFolder === 'perfect-generations' ? '⏳ Uploading…' : '⬆ Drop or click to upload'}
+                            <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.85rem 0', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                                {uploadingFolder === 'perfect-generations' ? (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                        <path d="M12 2a10 10 0 0 1 0 20" opacity="0.25"/>
+                                        <path d="M12 2a10 10 0 0 1 10 10"/>
+                                    </svg>
+                                ) : (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="16 16 12 12 8 16"/>
+                                        <line x1="12" y1="12" x2="12" y2="21"/>
+                                        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                                    </svg>
+                                )}
+                                <span>{uploadingFolder === 'perfect-generations' ? 'Uploading…' : 'Drop or click to upload'}</span>
                             </div>
                         ) : (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
@@ -1173,7 +1192,17 @@ export default function HomePage() {
 
                     {/* Needs Fixing */}
                     <div className="left-panel-section" style={{ color: '#ffb340', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span>🎭 Needs Fixing</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            {/* wand.and.stars — SF Symbol style */}
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M15 4l5 5L8 21 3 16z"/>
+                                <line x1="19" y1="2" x2="19" y2="6"/>
+                                <line x1="21" y1="4" x2="17" y2="4"/>
+                                <line x1="23" y1="9" x2="23" y2="11"/>
+                                <line x1="22" y1="10" x2="24" y2="10"/>
+                            </svg>
+                            Needs Fixing
+                        </span>
                         <button onClick={() => needsFixingInputRef.current?.click()} style={{ fontSize: '0.56rem', padding: '0.1rem 0.4rem', borderRadius: 3, border: '1px solid rgba(255,179,64,0.35)', background: 'rgba(255,179,64,0.08)', color: '#ffb340', cursor: 'pointer' }}>+ Upload</button>
                     </div>
                     <div
@@ -1184,8 +1213,20 @@ export default function HomePage() {
                         onClick={() => !needsFixingImages.length && needsFixingInputRef.current?.click()}
                     >
                         {needsFixingImages.length === 0 ? (
-                            <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.85rem 0', width: '100%' }}>
-                                {uploadingFolder === 'needs-fixing' ? '⏳ Uploading…' : '⬆ Drop or click to upload'}
+                            <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.85rem 0', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                                {uploadingFolder === 'needs-fixing' ? (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                        <path d="M12 2a10 10 0 0 1 0 20" opacity="0.25"/>
+                                        <path d="M12 2a10 10 0 0 1 10 10"/>
+                                    </svg>
+                                ) : (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="16 16 12 12 8 16"/>
+                                        <line x1="12" y1="12" x2="12" y2="21"/>
+                                        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                                    </svg>
+                                )}
+                                <span>{uploadingFolder === 'needs-fixing' ? 'Uploading…' : 'Drop or click to upload'}</span>
                             </div>
                         ) : (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
@@ -1216,7 +1257,13 @@ export default function HomePage() {
                                         } catch { /* ignore */ }
                                     }} title="Click to open in Mask Editor">
                                         <img src={thumbUrl(p)} alt="" className="output-thumb" loading="lazy" />
-                                        <div className="output-thumb-mask" style={{ opacity: 1, background: 'rgba(255,179,64,0.8)' }}>🎭</div>
+                                        <div className="output-thumb-mask" style={{ opacity: 1, background: 'rgba(255,179,64,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M15 4l5 5L8 21 3 16z"/>
+                                                <line x1="19" y1="2" x2="19" y2="6"/>
+                                                <line x1="21" y1="4" x2="17" y2="4"/>
+                                            </svg>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
