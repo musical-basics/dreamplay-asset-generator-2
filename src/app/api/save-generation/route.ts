@@ -114,3 +114,24 @@ export async function DELETE(req: NextRequest) {
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }
+
+// PATCH — update feedback (good/bad) on an existing sidecar
+export async function PATCH(req: NextRequest) {
+    try {
+        const { jobId, date, feedback } = await req.json();
+        if (!jobId || !date || !feedback) {
+            return NextResponse.json({ error: 'Missing jobId, date, or feedback' }, { status: 400 });
+        }
+        const dir = path.join(GENERATED_DIR, date);
+        // Find the sidecar — jobId is the base name
+        const metaFile = path.join(dir, `${jobId}.json`);
+        let meta: Record<string, unknown> = {};
+        try { meta = JSON.parse(await readFile(metaFile, 'utf-8')); } catch { /* no sidecar yet */ }
+        meta.feedback = feedback;
+        await writeFile(metaFile, JSON.stringify(meta, null, 2));
+        return NextResponse.json({ success: true });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return NextResponse.json({ error: message }, { status: 500 });
+    }
+}

@@ -398,8 +398,26 @@ export default function HomePage() {
         setPosSubmitting(false);
         closePosModal();
     };
-    const rateJob = (jobId: string, rating: 'good' | 'bad') =>
+    const rateJob = (jobId: string, rating: 'good' | 'bad') => {
         setJobs(prev => prev.map(j => j.id === jobId ? { ...j, feedback: rating } : j));
+        // Persist feedback to sidecar JSON on disk
+        setJobs(prev => {
+            const job = prev.find(j => j.id === jobId);
+            if (job?.resultUrl) {
+                // Extract date from path e.g. /generated/2026-04-06/jobId.png
+                const match = job.resultUrl.match(/\/generated\/([\d-]+)\//);
+                const date = match?.[1];
+                if (date) {
+                    fetch('/api/save-generation', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jobId, date, feedback: rating }),
+                    }).catch(() => {});
+                }
+            }
+            return prev;
+        });
+    };
 
     const submitFeedback = async (regenAfter: boolean) => {
         if (!fbJob) return;
@@ -667,6 +685,7 @@ export default function HomePage() {
                             resultUrl: out.path,   // public URL — works directly in <img>
                             prompt: out.prompt || '',
                             createdAt: out.createdAt || 0,
+                            feedback: (out.feedback as 'good' | 'bad' | undefined) || undefined,
                         });
                     }
                 }

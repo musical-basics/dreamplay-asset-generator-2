@@ -95,4 +95,5 @@ export interface SavedOutput {
     brandSuffix?: string;
     createdAt?: number;
     savedAt?: number;
+    feedback?: 'good' | 'bad';
 }
