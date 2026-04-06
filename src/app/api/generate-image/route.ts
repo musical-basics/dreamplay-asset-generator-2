@@ -116,8 +116,12 @@ The first images are PERFECT GENERATION references — study their:
 • LCD SCREEN: 1 rectangular screen, ~1/6 panel width. Same position as reference. No invented text.
 • SPEAKER GRILLS: Both ends — straight parallel horizontal grooves only. Left mirrors right exactly. No mesh.
 • BODY PROPORTIONS: Do not stretch, widen, shorten, or warp the chassis.
-• LOGO: DreamPlay circular yin-yang emblem + "Dream" (bold italic serif) + "Play" (outline stroke). Centered on control panel above key bed. Copy pixel-accurately from reference.
+• LOGO: DreamPlay branded circular emblem (two-tone interlocking swirl shape — do NOT render as a generic yin-yang symbol) + "Dream" (bold italic serif) + "Play" (outline stroke). Centered on control panel above key bed. Copy the exact design from the reference image.
 • TEXT SPELLING: Always "DreamPlay" — capital D, lowercase ream, capital P, lowercase lay. No variations. No extra text anywhere.
+
+⛔ ABSOLUTE HARD BANS — Never under any circumstances:
+• NEVER generate a yin-yang symbol anywhere in the image (not as decor, logo interpretation, background element, or pattern)
+• NEVER add text, watermarks, or labels that are not in the prompt
 
 ━━ VARIABLE (apply from the SPECS below) ━━━━━━━━━━━━━━━━━━━━━━━━━
 • Key color / finish (white keys, black keys, gradient options)
@@ -153,14 +157,27 @@ export async function POST(req: NextRequest) {
                 refParts.push({ inlineData: { data: baseImageBase64, mimeType: baseImageMimeType || 'image/png' } });
             }
 
-            // 3. User-selected reference images (up to additional slots)
+            // 3. User-selected reference images — these are SUBJECT references, not brand refs
+            let userRefInstruction = '';
             if (Array.isArray(refImagePaths) && refImagePaths.length > 0) {
                 const maxUser = Math.max(0, 8 - refParts.length);
                 const loaded = await Promise.all(
                     refImagePaths.slice(0, maxUser).map((p: string) => loadImageAsBase64(publicPathToFs(p)))
                 );
+                let addedCount = 0;
                 for (const img of loaded) {
-                    if (img) refParts.push({ inlineData: img });
+                    if (img) { refParts.push({ inlineData: img }); addedCount++; }
+                }
+                if (addedCount > 0) {
+                    userRefInstruction = `
+
+=== USER SUBJECT REFERENCES (LAST ${addedCount} IMAGE${addedCount > 1 ? 'S' : ''} ABOVE) ===
+These images show the SPECIFIC SUBJECT(S) the user wants in the scene.
+- PRESERVE the exact appearance of the person, animal, or object shown: face, body, breed, color, size.
+- Do NOT swap, replace, or hallucinate a different subject.
+- Apply ONLY the changes described in the user prompt (e.g. add clothing, change background, add product).
+- The subject's identity must be recognizable and consistent with the reference.
+===`;
                 }
             }
 
@@ -185,6 +202,7 @@ export async function POST(req: NextRequest) {
                 ratioHint +
                 baseCompInstruction +
                 refInstruction +
+                userRefInstruction +
                 DS60_MASTER_CONSTRAINT +
                 brandInstruction +
                 priorityInstruction;
