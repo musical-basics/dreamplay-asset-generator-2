@@ -149,6 +149,10 @@ export default function HomePage() {
     const [activeBrandTags, setActiveBrandTags] = useState<Set<string>>(new Set(DEFAULT_BRAND_CONFIG.styleWords));
     const [useBrandStyle, setUseBrandStyle] = useState<boolean>(true);
 
+    // ── Custom Folders (Reuploaded Workflow) ────────────────────
+    const [perfectImages, setPerfectImages] = useState<string[]>([]);
+    const [needsFixingImages, setNeedsFixingImages] = useState<string[]>([]);
+
     // ── Prompt preset toggles ───────────────────────────────────
     const [useStarterPreset, setUseStarterPreset] = useState(false);
     const [useNegativeGuard, setUseNegativeGuard] = useState(true);  // on by default — key anti-hallucination guard
@@ -724,6 +728,14 @@ export default function HomePage() {
             })
             .catch(() => { })
             .finally(() => setIsLoadingLibrary(false));
+
+        fetch('/api/custom-folders')
+            .then(r => r.json())
+            .then(data => {
+                if (data.perfectGenerations) setPerfectImages(data.perfectGenerations);
+                if (data.needsFixing) setNeedsFixingImages(data.needsFixing);
+            })
+            .catch(() => { });
     }, []);
 
     // ─── Memoized + paginated images ──────────────────────────────────────────────
@@ -1093,6 +1105,63 @@ export default function HomePage() {
                         </button>
                     </div>
                     {indexMsg && <div style={{ fontSize: '0.6rem', color: 'var(--accent-green)', padding: '0.25rem 0.75rem', background: 'rgba(48,209,88,0.08)', borderBottom: '1px solid rgba(48,209,88,0.15)' }}>{indexMsg}</div>}
+                    
+                    {/* ── REUPLOADED WORKFLOW ── */}
+                    {perfectImages.length > 0 && (
+                        <>
+                            <div className="left-panel-section" style={{ color: 'var(--gold)' }}>Perfect Generations (Ground Truth)</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3, padding: '0.1rem 0.6rem 0.5rem' }}>
+                                {perfectImages.map(path => {
+                                    const isSel = selectedRefPaths.includes(path);
+                                    return (
+                                        <div key={path} style={{ aspectRatio: '1', borderRadius: 4, overflow: 'hidden', cursor: 'pointer', border: isSel ? '2px solid var(--gold)' : '2px solid transparent', transition: 'all 0.1s' }} onClick={() => toggleRefSelection(path)} title="Add to references">
+                                            <img src={thumbUrl(path)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    )}
+                    {needsFixingImages.length > 0 && (
+                        <>
+                            <div className="left-panel-section" style={{ color: '#ffb340' }}>Needs Fixing (Reuploaded)</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3, padding: '0.1rem 0.6rem 0.5rem' }}>
+                                {needsFixingImages.map(path => (
+                                    <div key={path} className="output-thumb-wrap" style={{ border: '1px solid rgba(255, 179, 64, 0.4)' }} onClick={async () => {
+                                        // Load the saved image from disk as base64 for MaskEditor
+                                        try {
+                                            const imgRes = await fetch(path);
+                                            const blob = await imgRes.blob();
+                                            const reader = new FileReader();
+                                            reader.onload = () => {
+                                                const dataUrl = reader.result as string;
+                                                const [hdr, b64] = dataUrl.split(',');
+                                                const mime = hdr.replace('data:', '').replace(';base64', '');
+                                                setMaskEditorJob({
+                                                    id: `fix-${path}`,
+                                                    batchId: '',
+                                                    status: 'done',
+                                                    formatId: 'fix',
+                                                    formatLabel: 'Needs Fixing',
+                                                    formatName: 'Needs Fixing',
+                                                    modelId: selectedModel,
+                                                    modelName: '',
+                                                    prompt: '',
+                                                    resultUrl: dataUrl,
+                                                    createdAt: Date.now(),
+                                                } as GenerationJob);
+                                            };
+                                            reader.readAsDataURL(blob);
+                                        } catch { /* ignore */ }
+                                    }} title="Open Mask & Fix editor">
+                                        <img src={thumbUrl(path)} alt="" className="output-thumb" loading="lazy" />
+                                        <div className="output-thumb-mask" style={{ opacity: 1, background: 'rgba(255, 179, 64, 0.8)' }}>🎭</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
                     <div className="folder-tree">
                         {isLoadingLibrary ? (
                             <div style={{ padding: '1rem 0.75rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Loading…</div>
