@@ -375,7 +375,9 @@ export default function HomePage() {
             try {
                 let res: Response;
                 try {
-                    res = await fetch('/api/generate-image', {
+                    const genRoute = newJob.modelId.startsWith('grok') ? '/api/generate-image-aurora' : '/api/generate-image';
+                    console.log('[startGen] modelId:', newJob.modelId, '→ route:', genRoute);
+                    res = await fetch(genRoute, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prompt: newJob.prompt, modelId: newJob.modelId,
                             aspectRatio: fmt.aspectRatio, refImagePaths: selectedRefPaths, roleRefs, brandSuffix: brandSuffix ?? undefined }),
@@ -1046,7 +1048,9 @@ export default function HomePage() {
             try {
                 let res: Response;
                 try {
-                    res = await fetch(fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image', {
+                    const genRoute2 = job.modelId.startsWith('grok') ? '/api/generate-image-aurora' : (fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image');
+                    console.log('[posRegen] modelId:', job.modelId, '→ route:', genRoute2);
+                    res = await fetch(genRoute2, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, width: fmt.width, height: fmt.height, refImagePaths, brandSuffix, prioritySuffix }),
                     });
@@ -1101,7 +1105,9 @@ export default function HomePage() {
             try {
                 let res: Response;
                 try {
-                    res = await fetch(fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image', {
+                    const genRoute3 = job.modelId.startsWith('grok') ? '/api/generate-image-aurora' : (fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image');
+                    console.log('[histRegen] modelId:', job.modelId, '→ route:', genRoute3);
+                    res = await fetch(genRoute3, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, refImagePaths: entry.refPaths, roleRefs, brandSuffix, prioritySuffix }),
                     });
