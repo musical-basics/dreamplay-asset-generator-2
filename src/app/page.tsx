@@ -1554,9 +1554,8 @@ export default function HomePage() {
                             {activeRefCount > 0 && <button className="btn btn-ghost btn-sm" style={{ padding: '0.12rem 0.38rem', fontSize: '0.6rem', color: 'var(--accent-red)' }} onClick={() => { setSelectedRefPaths([]); setUploadedRefs([]); }}>Clear</button>}
                             <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" style={{ display: 'none' }} onChange={e => e.target.files && handleFiles(e.target.files)} />
                         </div>
-                        {/* Priority funnel */}
-                        {activeRefCount > 0 && (
-                            <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--lr-border)', paddingTop: '0.4rem' }}>
+                        {/* Priority funnel + role reference drop zones — always visible */}
+                        <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--lr-border)', paddingTop: '0.4rem' }}>
                                 <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.3rem' }}>Priority Order</div>
                              {priorityOrder.map((role, i) => (
                                     <div key={role} style={{ marginBottom: '0.3rem' }}>
@@ -1599,7 +1598,6 @@ export default function HomePage() {
                                     </div>
                                 ))}
                             </div>
-                        )}
                     </div>
                     {/* ── GENERATION HISTORY ── */}
                     <div className="left-panel-section" style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
