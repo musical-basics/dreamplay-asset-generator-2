@@ -559,6 +559,8 @@ export default function HomePage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ─── View state ───────────────────────────────────────────────────────────────
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
     const [lbJob, setLbJob] = useState<GenerationJob | null>(null); // filmstrip lightbox
@@ -2206,7 +2208,9 @@ export default function HomePage() {
 
             {/* ── FILMSTRIP ── */}
             <footer className="filmstrip" suppressHydrationWarning>
-                {jobs.length === 0 ? (
+                {!mounted ? (
+                    <div className="strip-empty">Loading…</div>
+                ) : jobs.length === 0 ? (
                     <div className="strip-empty">Checked formats generate as separate assets — all from the same prompt. Select formats above then click Generate.</div>
                 ) : (() => {
                     // Group jobs by batchId, preserve insertion order
