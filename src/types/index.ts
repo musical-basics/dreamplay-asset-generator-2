@@ -18,7 +18,7 @@ export interface OutputFormat {
 export interface ModelOption {
     id: string;
     name: string;
-    provider: 'google' | 'xai';
+    provider: 'google' | 'xai' | 'kling';
     type: 'image' | 'video' | 'text';
     tier: 'free' | 'paid';
     quality: 'fast' | 'balanced' | 'ultra';

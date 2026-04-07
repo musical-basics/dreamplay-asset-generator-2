@@ -382,11 +382,12 @@ export default function HomePage() {
             try {
                 let res: Response;
                 try {
-                    const genRoute = newJob.modelId.startsWith('grok') ? '/api/generate-image-aurora' : '/api/generate-image';
-                    console.log('[startGen] modelId:', newJob.modelId, '→ route:', genRoute);
+                    const effectiveModelId = newJob.modelId === 'auto' ? resolveAutoModel(fmt.type) : newJob.modelId;
+                    const genRoute = resolveGenRoute(effectiveModelId, fmt.type);
+                    console.log('[startGen] model:', effectiveModelId, '→ route:', genRoute);
                     res = await fetch(genRoute, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt: newJob.prompt, modelId: newJob.modelId,
+                        body: JSON.stringify({ prompt: newJob.prompt, modelId: effectiveModelId,
                             aspectRatio: fmt.aspectRatio, refImagePaths: selectedRefPaths, roleRefs,
                             brandSuffix: brandSuffix ?? undefined, priorityOrder, campaignMode }),
                     });
@@ -476,23 +477,21 @@ export default function HomePage() {
                 try {
                     let res: Response;
                     try {
-                        res = await fetch(
-                                newJob.modelId.startsWith('grok')
-                                    ? '/api/generate-image-aurora'
-                                    : '/api/generate-image',
-                                {
-                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        prompt: newJob.prompt, modelId: newJob.modelId,
-                                        aspectRatio: fmt.aspectRatio,
-                                        refImagePaths: selectedRefPaths,
-                                        roleRefs,
-                                        brandSuffix: brandSuffix ?? undefined,
-                                        priorityOrder,
-                                        campaignMode,
-                                    }),
-                                }
-                            );
+                        const effModelId = newJob.modelId === 'auto' ? resolveAutoModel(fmt.type) : newJob.modelId;
+                        const genRoute = resolveGenRoute(effModelId, fmt.type);
+                        console.log('[gen] model:', effModelId, '→', genRoute);
+                        res = await fetch(genRoute, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                prompt: newJob.prompt, modelId: effModelId,
+                                aspectRatio: fmt.aspectRatio,
+                                refImagePaths: selectedRefPaths,
+                                roleRefs,
+                                brandSuffix: brandSuffix ?? undefined,
+                                priorityOrder,
+                                campaignMode,
+                            }),
+                        });
                     } catch {
                         throw new Error('Server unreachable — make sure the dev server is running on port 3000');
                     }
@@ -1015,6 +1014,29 @@ export default function HomePage() {
         });
     };
 
+    // ─── Route resolver (central) ─────────────────────────────────────────────────
+    // Determines the correct API endpoint based on model and format type
+    const resolveGenRoute = (modelId: string, formatType: string): string => {
+        if (modelId.startsWith('grok')) return '/api/generate-image-aurora';
+        if (modelId.startsWith('kling')) return '/api/generate-video-kling';
+        if (formatType === 'video') return '/api/generate-video';
+        return '/api/generate-image';
+    };
+
+    // Auto model selection: picks best model based on context
+    const resolveAutoModel = (formatType: string): string => {
+        if (formatType === 'video') {
+            // Kling Pro for video if keys available, else Veo 2
+            return process.env.NEXT_PUBLIC_HAS_KLING ? 'kling-1.6-pro' : 'veo-2';
+        }
+        // For images: Talent ref set → Gemini Flash (best for identity); product-only → Gemini Flash Image
+        const hasTalent = roleRefs.Talent.length > 0;
+        if (campaignMode === 'merch' || hasTalent) {
+            return 'gemini-flash-image'; // Best identity adherence with reference images
+        }
+        return 'gemini-flash-image'; // Default: best free model for product shots
+    };
+
     // ─── Generation ───────────────────────────────────────────────────────────────
     const startGeneration = async () => {
         const formats = OUTPUT_FORMATS.filter(f => selectedFormats.has(f.id));
@@ -1058,11 +1080,12 @@ export default function HomePage() {
             try {
                 let res: Response;
                 try {
-                    const genRoute2 = job.modelId.startsWith('grok') ? '/api/generate-image-aurora' : (fmt.type === 'video' ? '/api/generate-video' : '/api/generate-image');
-                    console.log('[posRegen] modelId:', job.modelId, '→ route:', genRoute2);
+                    const effModelId2 = job.modelId === 'auto' ? resolveAutoModel(fmt.type) : job.modelId;
+                    const genRoute2 = resolveGenRoute(effModelId2, fmt.type);
+                    console.log('[posRegen] model:', effModelId2, '→ route:', genRoute2);
                     res = await fetch(genRoute2, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, width: fmt.width, height: fmt.height, refImagePaths, brandSuffix, prioritySuffix, priorityOrder, campaignMode }),
+                        body: JSON.stringify({ prompt: activePrompt, modelId: effModelId2, aspectRatio: fmt.aspectRatio, width: fmt.width, height: fmt.height, refImagePaths, brandSuffix, prioritySuffix, priorityOrder, campaignMode }),
                     });
                 } catch {
                     throw new Error('Server unreachable — make sure the dev server is running on port 3000');

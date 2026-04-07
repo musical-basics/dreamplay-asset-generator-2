@@ -460,6 +460,44 @@ export const MODEL_OPTIONS: ModelOption[] = [
         creditCost: 'xAI API key required',
         apiModel: 'grok-imagine-image',
     },
+    // ── Kling Video ──
+    {
+        id: 'kling-1.6',
+        name: 'Kling 1.6 ✦ Standard',
+        provider: 'kling',
+        type: 'video',
+        tier: 'paid',
+        quality: 'balanced',
+        description: 'Kling\'s latest standard video model. 5s HD clips, best quality-per-dollar for lifestyle and product video. Requires KLING_ACCESS_KEY + KLING_SECRET_KEY.',
+        bestFor: ['Lifestyle video', 'Product demos', 'Social reels', 'Quick cuts'],
+        creditCost: '~$0.14/sec (Kling API key required)',
+        apiModel: 'kling-v1-6',
+    },
+    {
+        id: 'kling-1.6-pro',
+        name: 'Kling 1.6 Pro ✦ Best',
+        provider: 'kling',
+        type: 'video',
+        tier: 'paid',
+        quality: 'ultra',
+        description: 'Kling 1.6 Pro — highest quality video generation. Best motion coherence, subject consistency, and cinematic output. Requires KLING_ACCESS_KEY + KLING_SECRET_KEY.',
+        bestFor: ['Hero brand videos', 'Cinematic ads', 'Product hero shots', 'Talent reels'],
+        creditCost: '~$0.28/sec (Kling API key required)',
+        apiModel: 'kling-v1-6-pro',
+    },
+    // ── Auto Mode ──
+    {
+        id: 'auto',
+        name: '✨ Auto (Best Model)',
+        provider: 'google',
+        type: 'image',
+        tier: 'free',
+        quality: 'ultra',
+        description: 'Automatically selects the best model for your prompt and campaign mode. Uses Gemini to analyze your request and routes to the optimal image or video model.',
+        bestFor: ['Everything — let AI decide'],
+        creditCost: 'Depends on selected model',
+        apiModel: 'auto',
+    },
 ];
 
 export const CATEGORY_LABELS: Record<string, string> = {
