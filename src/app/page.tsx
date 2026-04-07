@@ -149,6 +149,7 @@ export default function HomePage() {
     const [brandTags, setBrandTags] = useState<string[]>(DEFAULT_BRAND_CONFIG.styleWords);
     const [activeBrandTags, setActiveBrandTags] = useState<Set<string>>(new Set(DEFAULT_BRAND_CONFIG.styleWords));
     const [useBrandStyle, setUseBrandStyle] = useState<boolean>(true);
+    const [campaignMode, setCampaignMode] = useState<'product' | 'merch'>('product');
 
     // ── Custom Folders (Reuploaded Workflow) ────────────────────
     const [perfectImages, setPerfectImages] = useState<string[]>([]);
@@ -297,9 +298,15 @@ export default function HomePage() {
     useEffect(() => { localStorage.setItem('dp_product_specs', JSON.stringify(productSpecs)); }, [productSpecs]);
     useEffect(() => { localStorage.setItem('dp_selected_formats', JSON.stringify(Array.from(selectedFormats))); }, [selectedFormats]);
 
-    // Brand suffix — only computed when on
+    // Brand suffix — only computed when on; strips piano-specific rules in merch mode
+    const MERCH_BRAND_SUFFIX =
+        'Studio lighting, editorial fashion photography, premium brand aesthetic, high contrast, photorealistic, 8K ultra-detail. ' +
+        'CRITICAL REQUIREMENTS: Hyperrealistic photographic quality — correct light physics, accurate reflections, natural shadows, realistic material surface texture. ' +
+        'DreamPlay brand aesthetic: aspirational, high-end, emotionally resonant, modern. No impossible geometry, no distorted perspective.';
     const brandSuffix = useBrandStyle
-        ? `Style: ${Array.from(activeBrandTags).join(', ')}. Colors: ${DEFAULT_BRAND_CONFIG.colors.join(', ')}. ${DEFAULT_BRAND_CONFIG.customPromptSuffix}`
+        ? campaignMode === 'merch'
+            ? `Style: ${Array.from(activeBrandTags).join(', ')}. Colors: ${DEFAULT_BRAND_CONFIG.colors.join(', ')}. ${MERCH_BRAND_SUFFIX}`
+            : `Style: ${Array.from(activeBrandTags).join(', ')}. Colors: ${DEFAULT_BRAND_CONFIG.colors.join(', ')}. ${DEFAULT_BRAND_CONFIG.customPromptSuffix}`
         : undefined;
 
     // ─── Video durations (lazy loaded) ────────────────────────────────────────────
@@ -650,7 +657,6 @@ export default function HomePage() {
     };
     const [refTags, setRefTags] = useState<Map<string, RefRole>>(new Map());
     const [priorityOrder, setPriorityOrder] = useState<RefRole[]>(['Product', 'Talent', 'Background']);
-    const [campaignMode, setCampaignMode] = useState<'product' | 'merch'>('product');
     // Role-specific reference images dropped directly into each slot (max 2 per role)
     const [roleRefs, setRoleRefs] = useState<Record<RefRole, string[]>>({ Product: [], Talent: [], Background: [] });
     const addRoleRef = (role: RefRole, path: string) =>
@@ -2102,6 +2108,33 @@ export default function HomePage() {
                             </button>
                             {rightSections.has('prompt') && (
                                 <div className="lr-section-body">
+                                    {/* ── Campaign Mode Toggle — top of panel ── */}
+                                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.8rem' }}>
+                                        <button
+                                            onClick={() => setCampaignMode('product')}
+                                            style={{
+                                                flex: 1, padding: '0.5rem 0.4rem',
+                                                background: campaignMode === 'product' ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
+                                                border: campaignMode === 'product' ? '1px solid var(--accent)' : '1px solid var(--lr-border)',
+                                                borderRadius: 8, cursor: 'pointer',
+                                                color: campaignMode === 'product' ? '#000' : 'var(--text-muted)',
+                                                fontWeight: campaignMode === 'product' ? 700 : 400,
+                                                fontSize: '0.72rem', transition: 'all 0.15s',
+                                            }}
+                                        >🎹 Product Campaign</button>
+                                        <button
+                                            onClick={() => setCampaignMode('merch')}
+                                            style={{
+                                                flex: 1, padding: '0.5rem 0.4rem',
+                                                background: campaignMode === 'merch' ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
+                                                border: campaignMode === 'merch' ? '1px solid var(--accent)' : '1px solid var(--lr-border)',
+                                                borderRadius: 8, cursor: 'pointer',
+                                                color: campaignMode === 'merch' ? '#000' : 'var(--text-muted)',
+                                                fontWeight: campaignMode === 'merch' ? 700 : 400,
+                                                fontSize: '0.72rem', transition: 'all 0.15s',
+                                            }}
+                                        >👕 Merch / Lookbook</button>
+                                    </div>
                                     {/* Brand Style master toggle */}
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                                         <div style={{ fontSize: '0.6rem', color: useBrandStyle ? 'var(--accent)' : 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -2140,18 +2173,6 @@ export default function HomePage() {
                                         ))}
                                     </div>
                                     )}
-                                    {/* ── Campaign Mode Toggle ── */}
-                                    <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '0.5rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--lr-border)' }}>
-                                        <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', alignSelf: 'center', flexShrink: 0 }}>Mode:</span>
-                                        <label style={{ fontSize: '0.65rem', color: campaignMode === 'product' ? 'var(--accent)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: campaignMode === 'product' ? 700 : 400 }}>
-                                            <input type="radio" name="campaignMode" checked={campaignMode === 'product'} onChange={() => setCampaignMode('product')} style={{ accentColor: 'var(--accent)' }} />
-                                            🎹 Product Campaign
-                                        </label>
-                                        <label style={{ fontSize: '0.65rem', color: campaignMode === 'merch' ? 'var(--accent)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: campaignMode === 'merch' ? 700 : 400 }}>
-                                            <input type="radio" name="campaignMode" checked={campaignMode === 'merch'} onChange={() => setCampaignMode('merch')} style={{ accentColor: 'var(--accent)' }} />
-                                            👕 Merch / Lookbook
-                                        </label>
-                                    </div>
                                     {/* ── Prompt Presets ── */}
                                     <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
                                         <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '0.15rem' }}>Presets:</span>
