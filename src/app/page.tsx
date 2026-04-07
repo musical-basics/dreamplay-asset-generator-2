@@ -380,7 +380,8 @@ export default function HomePage() {
                     res = await fetch(genRoute, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prompt: newJob.prompt, modelId: newJob.modelId,
-                            aspectRatio: fmt.aspectRatio, refImagePaths: selectedRefPaths, roleRefs, brandSuffix: brandSuffix ?? undefined }),
+                            aspectRatio: fmt.aspectRatio, refImagePaths: selectedRefPaths, roleRefs,
+                            brandSuffix: brandSuffix ?? undefined, priorityOrder, campaignMode }),
                     });
                 } catch {
                     throw new Error('Server unreachable — make sure the dev server is running on port 3000');
@@ -480,6 +481,8 @@ export default function HomePage() {
                                         refImagePaths: selectedRefPaths,
                                         roleRefs,
                                         brandSuffix: brandSuffix ?? undefined,
+                                        priorityOrder,
+                                        campaignMode,
                                     }),
                                 }
                             );
@@ -647,6 +650,7 @@ export default function HomePage() {
     };
     const [refTags, setRefTags] = useState<Map<string, RefRole>>(new Map());
     const [priorityOrder, setPriorityOrder] = useState<RefRole[]>(['Product', 'Talent', 'Background']);
+    const [campaignMode, setCampaignMode] = useState<'product' | 'merch'>('product');
     // Role-specific reference images dropped directly into each slot (max 2 per role)
     const [roleRefs, setRoleRefs] = useState<Record<RefRole, string[]>>({ Product: [], Talent: [], Background: [] });
     const addRoleRef = (role: RefRole, path: string) =>
@@ -1052,7 +1056,7 @@ export default function HomePage() {
                     console.log('[posRegen] modelId:', job.modelId, '→ route:', genRoute2);
                     res = await fetch(genRoute2, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, width: fmt.width, height: fmt.height, refImagePaths, brandSuffix, prioritySuffix }),
+                        body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, width: fmt.width, height: fmt.height, refImagePaths, brandSuffix, prioritySuffix, priorityOrder, campaignMode }),
                     });
                 } catch {
                     throw new Error('Server unreachable — make sure the dev server is running on port 3000');
@@ -1109,7 +1113,7 @@ export default function HomePage() {
                     console.log('[histRegen] modelId:', job.modelId, '→ route:', genRoute3);
                     res = await fetch(genRoute3, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, refImagePaths: entry.refPaths, roleRefs, brandSuffix, prioritySuffix }),
+                        body: JSON.stringify({ prompt: activePrompt, modelId: job.modelId, aspectRatio: fmt.aspectRatio, refImagePaths: entry.refPaths, roleRefs, brandSuffix, prioritySuffix, priorityOrder, campaignMode }),
                     });
                 } catch {
                     throw new Error('Server unreachable — make sure the dev server is running on port 3000');
@@ -2136,6 +2140,18 @@ export default function HomePage() {
                                         ))}
                                     </div>
                                     )}
+                                    {/* ── Campaign Mode Toggle ── */}
+                                    <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '0.5rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--lr-border)' }}>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', alignSelf: 'center', flexShrink: 0 }}>Mode:</span>
+                                        <label style={{ fontSize: '0.65rem', color: campaignMode === 'product' ? 'var(--accent)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: campaignMode === 'product' ? 700 : 400 }}>
+                                            <input type="radio" name="campaignMode" checked={campaignMode === 'product'} onChange={() => setCampaignMode('product')} style={{ accentColor: 'var(--accent)' }} />
+                                            🎹 Product Campaign
+                                        </label>
+                                        <label style={{ fontSize: '0.65rem', color: campaignMode === 'merch' ? 'var(--accent)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: campaignMode === 'merch' ? 700 : 400 }}>
+                                            <input type="radio" name="campaignMode" checked={campaignMode === 'merch'} onChange={() => setCampaignMode('merch')} style={{ accentColor: 'var(--accent)' }} />
+                                            👕 Merch / Lookbook
+                                        </label>
+                                    </div>
                                     {/* ── Prompt Presets ── */}
                                     <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
                                         <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '0.15rem' }}>Presets:</span>

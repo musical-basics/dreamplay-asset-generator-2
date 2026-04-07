@@ -139,7 +139,7 @@ The first images are PERFECT GENERATION references — study their:
 
 export async function POST(req: NextRequest) {
     try {
-        const { prompt, modelId, aspectRatio, refImagePaths, roleRefs, brandSuffix, prioritySuffix, baseImageBase64, baseImageMimeType } = await req.json();
+        const { prompt, modelId, aspectRatio, refImagePaths, roleRefs, brandSuffix, prioritySuffix, baseImageBase64, baseImageMimeType, priorityOrder, campaignMode } = await req.json();
 
         if (!prompt || !modelId) {
             return NextResponse.json({ error: 'Missing prompt or modelId' }, { status: 400 });
@@ -148,102 +148,103 @@ export async function POST(req: NextRequest) {
         const ai = getGoogleAI();
 
         if (modelId.startsWith('gemini-')) {
-            // 1. Perfect-generation ground truth (ALWAYS first — structural reference)
-            const [perfectRefs, brandRefs] = await Promise.all([loadPerfectGenRefs(), loadBrandRefs()]);
-            const refParts: { inlineData: { data: string; mimeType: string } }[] = [
-                ...perfectRefs.map(r => ({ inlineData: r })),
-                ...brandRefs.map(r => ({ inlineData: r })),
-            ];
+            const isProductCampaign = campaignMode !== 'merch';
 
-            // 2. Base composition image (for aspect-ratio variants)
+            // Helper: interleave a text label directly before its image(s)
+            // This gives Gemini an unambiguous identity mapping: label → pixels
+            const parts: { text?: string; inlineData?: { data: string; mimeType: string } }[] = [];
+            const addInterleaved = (label: string, refs: ({ data: string; mimeType: string } | null)[]) => {
+                const valid = refs.filter(Boolean) as { data: string; mimeType: string }[];
+                if (valid.length === 0) return;
+                parts.push({ text: label });
+                valid.forEach(r => parts.push({ inlineData: r }));
+            };
+
+            // 1. Base composition image (aspect-ratio variant source)
             if (baseImageBase64) {
-                refParts.push({ inlineData: { data: baseImageBase64, mimeType: baseImageMimeType || 'image/png' } });
+                addInterleaved(
+                    '=== BASE COMPOSITION (Reframe to target aspect ratio, preserve all product details) ===',
+                    [{ data: baseImageBase64, mimeType: baseImageMimeType || 'image/png' }]
+                );
             }
 
-            // 3. Role-specific reference images (Product / Talent / Background)
-            let roleRefInstruction = '';
+            // 2. Role-specific reference images — ordered by the UI's priorityOrder
             const roleLabelMap: Record<string, string> = {
-                Product: 'PRODUCT REFERENCE — This image shows the exact product (piano/keyboard). Match its shape, color, branding, key layout, and physical details precisely. This is the primary layout anchor.',
-                Talent: 'TALENT / ACTOR REFERENCE — CRITICAL IDENTITY LOCK. This image shows THE SPECIFIC PERSON who must appear in the final image. You MUST replicate: their exact gender, face, skin tone, hair color/style, and body type with zero deviation. Do NOT generate a different person, do NOT change their gender, do NOT use a generic or stock face. The person in this reference IS the talent — treat their appearance as a hard constraint identical to product geometry.',
-                Background: 'BACKGROUND / SETTING REFERENCE — This image defines the scene, environment, and atmosphere. Replicate the key visual elements, lighting mood, and spatial context.',
+                Product: 'PRODUCT REFERENCE: Match shape, color, branding, key layout, and physical details exactly. This is the structural anchor.',
+                Talent: 'TALENT / ACTOR REFERENCE — CRITICAL IDENTITY LOCK: Replicate exact gender, ethnicity, face, skin tone, hair color/style, and body type with ZERO deviation. Do NOT generate a different person. Do NOT change their gender. Treat this person\'s appearance as a hard constraint equal to product geometry.',
+                Background: 'BACKGROUND / SETTING REFERENCE: Replicate the environment, lighting mood, and spatial context exactly.',
             };
+            const roleOrder: string[] = Array.isArray(priorityOrder) && priorityOrder.length
+                ? priorityOrder
+                : ['Product', 'Talent', 'Background'];
+
             if (roleRefs && typeof roleRefs === 'object') {
-                const roleOrder: string[] = ['Product', 'Talent', 'Background'];
                 for (const role of roleOrder) {
                     const paths: string[] = Array.isArray(roleRefs[role]) ? roleRefs[role] : [];
                     if (paths.length === 0) continue;
-                    const maxSlots = Math.max(0, 8 - refParts.length);
-                    if (maxSlots <= 0) break;
-                    const loaded = await Promise.all(
-                        paths.slice(0, Math.min(2, maxSlots)).map((p: string) => loadImageAsBase64(publicPathToFs(p)))
-                    );
-                    let added = 0;
-                    for (const img of loaded) {
-                        if (img) { refParts.push({ inlineData: img }); added++; }
-                    }
-                    if (added > 0) {
-                        roleRefInstruction += `\n\n=== ${role.toUpperCase()} REFERENCE (LAST ${added} IMAGE${added > 1 ? 'S' : ''} ABOVE) ===\n${roleLabelMap[role]}\n===`;
-                    }
+                    const loaded = await Promise.all(paths.slice(0, 2).map((p: string) => loadImageAsBase64(publicPathToFs(p))));
+                    addInterleaved(`\n\n=== ${role.toUpperCase()} REFERENCE ===\n${roleLabelMap[role]}`, loaded);
                 }
             }
 
-            // 4. General user-selected reference images
-            let userRefInstruction = '';
-            if (Array.isArray(refImagePaths) && refImagePaths.length > 0) {
-                const maxUser = Math.max(0, 8 - refParts.length);
-                const loaded = await Promise.all(
-                    refImagePaths.slice(0, maxUser).map((p: string) => loadImageAsBase64(publicPathToFs(p)))
+            // 3. Structural ground truth — only for piano/product campaigns
+            if (isProductCampaign) {
+                const perfectRefs = await loadPerfectGenRefs();
+                addInterleaved(
+                    '\n\n=== PIANO GROUND TRUTH (Structural reference — match geometry exactly) ===',
+                    perfectRefs
                 );
-                let addedCount = 0;
-                for (const img of loaded) {
-                    if (img) { refParts.push({ inlineData: img }); addedCount++; }
-                }
-                if (addedCount > 0) {
-                    userRefInstruction = `\n\n=== USER SUBJECT REFERENCES (LAST ${addedCount} IMAGE${addedCount > 1 ? 'S' : ''} ABOVE) ===\nThese images show the SPECIFIC SUBJECT(S) the user wants in the scene.\n- PRESERVE the exact appearance of the person, animal, or object shown: face, body, breed, color, size.\n- Do NOT swap, replace, or hallucinate a different subject.\n- Apply ONLY the changes described in the user prompt (e.g. add clothing, change background, add product).\n- The subject's identity must be recognizable and consistent with the reference.\n===`;
-                }
             }
 
-            // 4. Build prompt
+            // 4. Brand assets — always included
+            const brandRefs = await loadBrandRefs();
+            addInterleaved('\n\n=== BRAND ASSETS (Apply logos and brand marks correctly) ===', brandRefs);
+
+            // 5. General user-selected reference images
+            if (Array.isArray(refImagePaths) && refImagePaths.length > 0) {
+                const loaded = await Promise.all(refImagePaths.slice(0, 4).map((p: string) => loadImageAsBase64(publicPathToFs(p))));
+                addInterleaved(
+                    '\n\n=== ADDITIONAL USER REFERENCES ===\nThese show the specific subject(s) the user wants in the scene. Preserve their exact appearance — face, body, breed, color, size. Do NOT swap or hallucinate a different subject. Apply only the changes described in the user prompt.',
+                    loaded
+                );
+            }
+
+            // 6. Active constraints block — swapped based on campaign mode
             const ratioHint = aspectRatio && aspectRatio !== '1:1'
                 ? ` Compose the image in ${aspectRatio} aspect ratio.`
                 : '';
+            const brandInstruction = brandSuffix ? `\nBrand Style: ${brandSuffix}` : '';
+            const priorityInstruction = prioritySuffix ? `\nPriority Notes: ${prioritySuffix}` : '';
 
-            const refInstruction = refParts.length > 0
-                ? ' The FIRST reference images are canonical DS 6.0 product shots — use them as ground truth for ALL product details. Match every element precisely.'
-                : '';
+            const activeConstraint = isProductCampaign
+                ? DS60_MASTER_CONSTRAINT
+                : `
+⛔⛔⛔ PREFLIGHT HARD BANS:
+1. ZERO yin-yang symbols anywhere in the image — not as decor, prop, logo, shadow, or pattern.
+2. This is a MERCH / APPAREL / LOOKBOOK campaign. Focus entirely on the human talent and the clothing/apparel. Do NOT generate a piano or keyboard unless the user's prompt explicitly requests one.
+3. No unauthorized text or watermarks.
+⛔⛔⛔`;
 
-            const baseCompInstruction = baseImageBase64
-                ? ' One reference image is the base composition — reframe it to the new aspect ratio while preserving all product details.'
-                : '';
+            const finalPromptText = `[USER PROMPT]\n${prompt}${ratioHint}
 
-            const brandInstruction = brandSuffix ? ` ${brandSuffix}` : '';
-            const priorityInstruction = prioritySuffix ? ` ${prioritySuffix}` : '';
+[PRIORITIES & BRANDING]${priorityInstruction}${brandInstruction}
 
-            const fullPrompt =
-                prompt +
-                ratioHint +
-                baseCompInstruction +
-                refInstruction +
-                roleRefInstruction +
-                userRefInstruction +
-                DS60_MASTER_CONSTRAINT +
-                brandInstruction +
-                priorityInstruction;
+[CRITICAL CONSTRAINTS]
+${activeConstraint}`;
+
+            parts.push({ text: finalPromptText });
 
             console.log(
-                '[generate-image] prompt len:', fullPrompt.length,
-                '| perfect refs:', perfectRefs.length,
-                '| brand refs:', brandRefs.length,
-                '| user refs:', refImagePaths?.length ?? 0,
-                '| base:', !!baseImageBase64,
+                '[generate-image] campaign:', campaignMode ?? 'product',
+                '| priority order:', roleOrder.join('>'),
+                '| parts count:', parts.length,
+                '| prompt len:', finalPromptText.length,
             );
 
             const response = await withRetry(() => ai.models.generateContent({
                 model: resolveModelId(modelId),
-                contents: [{ role: 'user', parts: [...refParts, { text: fullPrompt }] }],
-                config: {
-                    responseModalities: ['image', 'text'],
-                },
+                contents: [{ role: 'user', parts }],
+                config: { responseModalities: ['image', 'text'] },
             }));
 
             const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
