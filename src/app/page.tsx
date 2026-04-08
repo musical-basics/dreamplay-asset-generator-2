@@ -582,6 +582,8 @@ export default function HomePage() {
     const [interpModifier, setInterpModifier] = useState('');
     const [interpSynthesis, setInterpSynthesis] = useState('');
     const [interpSourcePath, setInterpSourcePath] = useState<string | null>(null);
+    const [interpGenerating, setInterpGenerating] = useState(false);
+    const [interpPureResult, setInterpPureResult] = useState<string | null>(null);
 
     // ─── View state ───────────────────────────────────────────────────────────────
     const [mounted, setMounted] = useState(false);
@@ -713,15 +715,15 @@ export default function HomePage() {
         if (!interpAnalysis || !interpModifier.trim()) return;
         setInterpSynthesizing(true);
         setInterpSynthesis('');
+        setInterpPureResult(null);
         try {
             const res = await fetch('/api/interpret-reference', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    mode: 'synthesize',
+                    mode: 'pure-synthesize',   // No brand context — clean slate
                     analysis: interpAnalysis,
                     modifier: interpModifier,
-                    brandContext: brandSuffix || 'DreamPlay Pianos — cinematic, luxury, dark, premium',
                 }),
             });
             const data = await res.json();
@@ -730,6 +732,67 @@ export default function HomePage() {
             setInterpSynthesis(`Error: ${err instanceof Error ? err.message : String(err)}`);
         } finally {
             setInterpSynthesizing(false);
+        }
+    };
+
+    // ─── Pure Reference Generate ──────────────────────────────────────────────
+    // Fires generation using ONLY the synthesized prompt + the analyzed ref image.
+    // Zero brand suffix, zero spec suffix, zero negative guards, zero role refs.
+    const generatePure = async () => {
+        if (!interpSynthesis.trim()) return;
+        setInterpGenerating(true);
+        setInterpPureResult(null);
+        const newJobId = `pure-${Date.now()}-${Math.random()}`;
+        const newJob: GenerationJob = {
+            id: newJobId,
+            batchId: `b-pure-${Date.now()}`,
+            formatId: 'pure-ref',
+            formatLabel: '✨ Pure Ref',
+            modelId: selectedModel,
+            modelName: 'Pure Reference Mode',
+            status: 'processing',
+            prompt: interpSynthesis,
+            createdAt: Date.now(),
+        };
+        setJobs(prev => [newJob, ...prev]);
+        try {
+            // Resolve the effective model — use flash image model for generation
+            const effectiveModelId = selectedModel === 'auto' ? 'gemini-flash-image-31' : selectedModel;
+            const res = await fetch('/api/generate-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: interpSynthesis,
+                    modelId: effectiveModelId,
+                    aspectRatio: '1:1',
+                    // Only the single analyzed reference image
+                    refImagePaths: interpSourcePath ? [interpSourcePath] : [],
+                    // Pure = NO brand suffix, NO role refs, NO campaign mode guardrails
+                    brandSuffix: undefined,
+                    roleRefs: undefined,
+                    priorityOrder: undefined,
+                    campaignMode: 'pure',   // signals generate-image to skip DS60 constraints
+                }),
+            });
+            const data = await res.json();
+            if (data.base64) {
+                const resultUrl = `data:${data.mimeType || 'image/png'};base64,${data.base64}`;
+                setJobs(prev => prev.map(j => j.id === newJobId
+                    ? { ...j, status: 'done', resultUrl, completedAt: Date.now() } : j));
+                setActiveStrip(newJobId);
+                saveGenerationToDisk(newJob, data.base64, data.mimeType || 'image/png', interpSourcePath ? [interpSourcePath] : [], undefined);
+                setInterpPureResult('✓ Generated — check the filmstrip!');
+            } else {
+                setJobs(prev => prev.map(j => j.id === newJobId
+                    ? { ...j, status: 'error', error: data.error || 'No image returned' } : j));
+                setInterpPureResult(`Error: ${data.error || 'No image returned'}`);
+            }
+        } catch (err) {
+            setJobs(prev => prev.map(j => j.id === newJobId
+                ? { ...j, status: 'error', error: err instanceof Error ? err.message : String(err) } : j));
+            setInterpPureResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setInterpGenerating(false);
         }
     };
 
@@ -1733,85 +1796,129 @@ export default function HomePage() {
                         {/* ── Reference Interpreter Panel ── */}
                         {interpOpen && (
                             <div style={{
-                                marginTop: '0.5rem', borderTop: '1px solid var(--lr-border)',
-                                paddingTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.4rem',
+                                marginTop: '0.5rem', borderTop: '2px solid rgba(201,168,76,0.4)',
+                                paddingTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.45rem',
                             }}>
+                                {/* Header */}
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>🔎 Reference Interpreter</span>
-                                    <button onClick={() => setInterpOpen(false)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.62rem' }}>✕</button>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                        <span style={{ fontSize: '0.64rem', fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.04em' }}>🧬 Pure Reference Mode</span>
+                                        <span style={{ fontSize: '0.55rem', color: 'rgba(201,168,76,0.6)', fontStyle: 'italic' }}>No brand guardrails · Gemini 2.5 Pro</span>
+                                    </div>
+                                    <button onClick={() => setInterpOpen(false)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.7rem', lineHeight: 1 }}>✕</button>
                                 </div>
 
-                                {/* Box 1: Gemini Analysis */}
+                                {/* Box 1: Gemini Sees */}
                                 <div>
-                                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 600 }}>① Gemini Sees</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.2rem' }}>
+                                        <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontWeight: 700 }}>① Gemini Sees</span>
+                                        {interpAnalysis && !interpAnalyzing && (
+                                            <span style={{ fontSize: '0.5rem', background: 'rgba(201,168,76,0.15)', color: 'rgba(201,168,76,0.8)', borderRadius: 3, padding: '1px 4px' }}>2.5 Pro</span>
+                                        )}
+                                    </div>
                                     <textarea
-                                        value={interpAnalyzing ? 'Analyzing...' : interpAnalysis}
+                                        value={interpAnalyzing ? '🔍 Analyzing with Gemini 2.5 Pro...' : interpAnalysis}
                                         onChange={e => setInterpAnalysis(e.target.value)}
                                         readOnly={interpAnalyzing}
-                                        placeholder="Select a reference image and click 🔍 to analyze it"
+                                        placeholder="Select a reference image below and click 🔍 Analyze"
                                         style={{
-                                            width: '100%', minHeight: 72, resize: 'vertical',
+                                            width: '100%', minHeight: 80, resize: 'vertical',
                                             background: 'rgba(255,255,255,0.04)', border: '1px solid var(--lr-border)',
-                                            borderRadius: 6, padding: '0.35rem 0.4rem', fontSize: '0.64rem',
+                                            borderRadius: 6, padding: '0.35rem 0.4rem', fontSize: '0.63rem',
                                             color: interpAnalyzing ? 'var(--text-muted)' : 'var(--text-primary)',
-                                            lineHeight: 1.5, fontFamily: 'inherit',
+                                            lineHeight: 1.55, fontFamily: 'inherit', boxSizing: 'border-box',
                                         }}
                                     />
                                 </div>
 
-                                {/* Box 2: Human Modifier */}
+                                {/* Box 2: Your Direction */}
                                 <div>
-                                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 600 }}>② Your Direction</div>
+                                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 700 }}>② Your Direction</div>
                                     <textarea
                                         value={interpModifier}
                                         onChange={e => setInterpModifier(e.target.value)}
-                                        placeholder="What do you want to change or emphasize? (e.g. 'swap background to dark studio, add fog, keep the piano exactly as shown')"
+                                        placeholder="What do you want to add, change, or keep? e.g. 'swap background to dark misty forest, keep the subject exactly as shown, add volumetric fog'"
                                         style={{
-                                            width: '100%', minHeight: 56, resize: 'vertical',
+                                            width: '100%', minHeight: 64, resize: 'vertical',
                                             background: 'rgba(255,255,255,0.04)', border: '1px solid var(--lr-border)',
-                                            borderRadius: 6, padding: '0.35rem 0.4rem', fontSize: '0.64rem',
-                                            color: 'var(--text-primary)', lineHeight: 1.5, fontFamily: 'inherit',
+                                            borderRadius: 6, padding: '0.35rem 0.4rem', fontSize: '0.63rem',
+                                            color: 'var(--text-primary)', lineHeight: 1.55, fontFamily: 'inherit', boxSizing: 'border-box',
                                         }}
                                     />
                                     <button
                                         onClick={synthesizeRef}
                                         disabled={!interpAnalysis || !interpModifier.trim() || interpSynthesizing}
                                         style={{
-                                            marginTop: '0.25rem', padding: '0.28rem 0.7rem', fontSize: '0.64rem',
-                                            background: (!interpAnalysis || !interpModifier.trim()) ? 'rgba(255,255,255,0.06)' : 'var(--accent)',
-                                            border: 'none', borderRadius: 6, cursor: 'pointer',
-                                            color: (!interpAnalysis || !interpModifier.trim()) ? 'var(--text-muted)' : '#000',
-                                            fontWeight: 600, transition: 'all 0.15s',
+                                            marginTop: '0.25rem', padding: '0.3rem 0.8rem', fontSize: '0.65rem',
+                                            background: (!interpAnalysis || !interpModifier.trim()) ? 'rgba(255,255,255,0.06)' : 'rgba(201,168,76,0.18)',
+                                            border: `1px solid ${(!interpAnalysis || !interpModifier.trim()) ? 'transparent' : 'rgba(201,168,76,0.4)'}`,
+                                            borderRadius: 6, cursor: (!interpAnalysis || !interpModifier.trim()) ? 'default' : 'pointer',
+                                            color: (!interpAnalysis || !interpModifier.trim()) ? 'var(--text-muted)' : 'var(--accent)',
+                                            fontWeight: 700, transition: 'all 0.15s', width: '100%',
                                         }}
                                     >
-                                        {interpSynthesizing ? '✨ Synthesizing...' : '✨ Synthesize'}
+                                        {interpSynthesizing ? '✨ Building clean prompt...' : '✨ Build Pure Prompt'}
                                     </button>
                                 </div>
 
-                                {/* Box 3: Synthesized Prompt */}
+                                {/* Box 3: Pure Prompt + Generate */}
                                 {interpSynthesis && (
                                     <div>
-                                        <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 600 }}>③ Final Prompt</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.2rem' }}>
+                                            <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontWeight: 700 }}>③ Pure Prompt</span>
+                                            <span style={{ fontSize: '0.5rem', background: 'rgba(120,200,120,0.12)', color: 'rgba(120,220,120,0.85)', borderRadius: 3, padding: '1px 5px' }}>no guardrails</span>
+                                        </div>
                                         <textarea
                                             value={interpSynthesis}
-                                            onChange={e => setInterpSynthesis(e.target.value)}
+                                            onChange={e => { setInterpSynthesis(e.target.value); setInterpPureResult(null); }}
                                             style={{
-                                                width: '100%', minHeight: 72, resize: 'vertical',
-                                                background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.35)',
-                                                borderRadius: 6, padding: '0.35rem 0.4rem', fontSize: '0.64rem',
-                                                color: 'var(--text-primary)', lineHeight: 1.5, fontFamily: 'inherit',
+                                                width: '100%', minHeight: 88, resize: 'vertical',
+                                                background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.3)',
+                                                borderRadius: 6, padding: '0.35rem 0.4rem', fontSize: '0.63rem',
+                                                color: 'var(--text-primary)', lineHeight: 1.55, fontFamily: 'inherit', boxSizing: 'border-box',
                                             }}
                                         />
-                                        <button
-                                            onClick={() => { setEnhancedPrompt(interpSynthesis); setInterpOpen(false); }}
-                                            style={{
-                                                marginTop: '0.25rem', padding: '0.28rem 0.7rem', fontSize: '0.64rem',
-                                                background: 'var(--accent)', border: 'none', borderRadius: 6,
-                                                cursor: 'pointer', color: '#000', fontWeight: 700,
-                                            }}
-                                        >
-                                            ✓ Use This Prompt
-                                        </button>
+                                        {/* Action buttons */}
+                                        <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.3rem' }}>
+                                            <button
+                                                onClick={generatePure}
+                                                disabled={interpGenerating}
+                                                style={{
+                                                    flex: 2, padding: '0.35rem 0.5rem', fontSize: '0.65rem',
+                                                    background: interpGenerating ? 'rgba(201,168,76,0.1)' : 'var(--accent)',
+                                                    border: 'none', borderRadius: 6,
+                                                    cursor: interpGenerating ? 'default' : 'pointer',
+                                                    color: interpGenerating ? 'var(--accent)' : '#000',
+                                                    fontWeight: 700, transition: 'all 0.15s',
+                                                }}
+                                            >
+                                                {interpGenerating ? '⚡ Generating...' : '⚡ Generate Pure'}
+                                            </button>
+                                            <button
+                                                onClick={() => { setPrompt(interpSynthesis); }}
+                                                style={{
+                                                    flex: 1, padding: '0.35rem 0.4rem', fontSize: '0.62rem',
+                                                    background: 'rgba(255,255,255,0.06)', border: '1px solid var(--lr-border)',
+                                                    borderRadius: 6, cursor: 'pointer',
+                                                    color: 'var(--text-muted)', fontWeight: 600, transition: 'all 0.15s',
+                                                }}
+                                                title="Copy to the main prompt field"
+                                            >
+                                                → Main
+                                            </button>
+                                        </div>
+                                        {/* Status feedback */}
+                                        {interpPureResult && (
+                                            <div style={{
+                                                marginTop: '0.3rem', fontSize: '0.6rem', padding: '0.25rem 0.4rem',
+                                                borderRadius: 4, fontWeight: 600,
+                                                background: interpPureResult.startsWith('✓') ? 'rgba(120,220,120,0.1)' : 'rgba(220,80,80,0.1)',
+                                                color: interpPureResult.startsWith('✓') ? 'rgba(120,220,120,0.9)' : 'rgba(220,80,80,0.9)',
+                                                border: `1px solid ${interpPureResult.startsWith('✓') ? 'rgba(120,220,120,0.25)' : 'rgba(220,80,80,0.25)'}`,
+                                            }}>
+                                                {interpPureResult}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

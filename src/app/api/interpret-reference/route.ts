@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGoogleAI } from '@/lib/google-ai';
 
-const MODEL = 'gemini-2.0-flash';
+// Gemini 2.5 Pro for highest-quality visual analysis & prompt synthesis
+const ANALYSIS_MODEL = 'gemini-2.5-pro-preview-05-06';
+const FALLBACK_MODEL  = 'gemini-2.0-flash';          // fallback if 2.5 quota hit
+
+async function runWithFallback(ai: ReturnType<typeof getGoogleAI>, params: Parameters<ReturnType<typeof getGoogleAI>['models']['generateContent']>[0]) {
+    try {
+        return await ai.models.generateContent({ ...params, model: ANALYSIS_MODEL });
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('quota') || msg.includes('429') || msg.includes('not found') || msg.includes('not supported')) {
+            console.warn('[interpret-reference] 2.5 Pro unavailable, falling back to 2.0 Flash:', msg);
+            return await ai.models.generateContent({ ...params, model: FALLBACK_MODEL });
+        }
+        throw err;
+    }
+}
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -15,33 +30,33 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: 'Missing image data' }, { status: 400 });
             }
 
-            const response = await ai.models.generateContent({
-                model: MODEL,
+            const response = await runWithFallback(ai, {
+                model: ANALYSIS_MODEL,
                 contents: [{
                     role: 'user',
                     parts: [
                         { inlineData: { data: imageBase64, mimeType: imageMimeType } },
-                        { text: `You are a creative director and visual analyst for DreamPlay Pianos, a premium luxury brand.
+                        { text: `You are an expert visual analyst and creative director. Study this reference image deeply.
 
-Analyze this reference image in detail and produce a structured visual analysis for use in AI image generation.
+Produce a rich, precise visual analysis structured around these dimensions:
 
-Describe the following with precision:
-1. **Subject & Composition** — what is the main subject, how is it placed, camera angle, framing
-2. **Lighting** — quality, direction, color temperature, shadows, highlights, mood
-3. **Color Palette** — dominant colors, tones, saturation, contrast
-4. **Background & Environment** — setting, depth, bokeh, textures
-5. **Mood & Atmosphere** — emotional tone, style (cinematic, editorial, lifestyle, etc.)
-6. **Technical Style** — photography style, post-processing look, depth of field
+1. **Subject & Composition** — main subject, placement, camera angle, framing, depth
+2. **Lighting** — quality, direction, color temperature, shadows, highlights, specular, mood
+3. **Color Palette** — dominant hues, tones, saturation levels, contrast, color relationships
+4. **Materials & Textures** — surface finishes, material properties, tactile qualities
+5. **Background & Environment** — setting, depth, bokeh, environmental elements
+6. **Mood & Atmosphere** — emotional register, cinematic style, energy
+7. **Technical Photography Style** — lens type feel, depth of field, post-processing look
 
-Be precise and descriptive. Use language that translates directly into effective generation prompts. No bullet headers in output — write as rich, comma-separated descriptors ready for use as a prompt foundation.` },
+Be extremely precise and descriptive. Write as rich comma-separated descriptors — language that can be used directly as an image generation prompt foundation. No bullet headers in output.` },
                     ]
                 }],
             });
 
-            return NextResponse.json({ success: true, analysis: response.text?.trim() || '' });
+            return NextResponse.json({ success: true, analysis: response.text?.trim() || '', model: ANALYSIS_MODEL });
         }
 
-        // ── Mode 2: Synthesize analysis + human modifier ──────────────────────
+        // ── Mode 2: Synthesize with brand context (standard mode) ─────────────
         if (mode === 'synthesize') {
             if (!analysis || !modifier) {
                 return NextResponse.json({ error: 'Missing analysis or modifier' }, { status: 400 });
@@ -49,9 +64,9 @@ Be precise and descriptive. Use language that translates directly into effective
 
             const brand = brandContext || 'DreamPlay Pianos — cinematic, luxury, premium, dark, modern';
 
-            const response = await ai.models.generateContent({
-                model: MODEL,
-                contents: `You are a creative director for DreamPlay Pianos synthesizing a final image generation prompt.
+            const response = await runWithFallback(ai, {
+                model: ANALYSIS_MODEL,
+                contents: `You are a creative director synthesizing a final image generation prompt.
 
 You have two inputs:
 1. **AI Visual Analysis** (what Gemini sees in the reference image):
@@ -63,7 +78,7 @@ ${modifier}
 **Your task**: Synthesize these into a single, production-ready generation prompt that:
 - Preserves the best visual elements from the reference that the human didn't explicitly change
 - Incorporates the human's desired modifications fully
-- Applies DreamPlay brand language: ${brand}
+- Applies brand language: ${brand}
 - Adds specific lighting, composition, and quality descriptors
 - Stays under 200 words
 - Is written as a single cohesive prompt (no headers, no lists)
@@ -71,10 +86,43 @@ ${modifier}
 Output ONLY the final synthesized prompt. No explanation, no preamble.`,
             });
 
-            return NextResponse.json({ success: true, synthesis: response.text?.trim() || '' });
+            return NextResponse.json({ success: true, synthesis: response.text?.trim() || '', model: ANALYSIS_MODEL });
         }
 
-        return NextResponse.json({ error: 'Invalid mode. Use "analyze" or "synthesize"' }, { status: 400 });
+        // ── Mode 3: PURE synthesize — no brand, no guardrails ────────────────
+        if (mode === 'pure-synthesize') {
+            if (!analysis || !modifier) {
+                return NextResponse.json({ error: 'Missing analysis or modifier' }, { status: 400 });
+            }
+
+            const response = await runWithFallback(ai, {
+                model: ANALYSIS_MODEL,
+                contents: `You are a visual artist synthesizing a clean image generation prompt from a reference photo analysis and human creative direction.
+
+You have two inputs:
+1. **Visual Analysis** (what was observed in the reference image):
+${analysis}
+
+2. **Human Direction** (what the creator wants to achieve or change):
+${modifier}
+
+**Your task**: Write a single, clean image generation prompt that:
+- Faithfully captures the visual essence of the reference (lighting, composition, mood, materials, colors)
+- Incorporates ALL of the human's creative direction
+- Is written as rich, evocative descriptive language
+- Contains absolutely NO brand names, product names, restrictions, or negative guards
+- Contains NO instructions about what NOT to do
+- Is purely additive and descriptive — describe what SHOULD be in the image
+- Reads as a natural, fluid creative brief (no lists, no headers, no sections)
+- Is 100–180 words
+
+Output ONLY the prompt. No preamble, no explanation, no labels.`,
+            });
+
+            return NextResponse.json({ success: true, synthesis: response.text?.trim() || '', model: ANALYSIS_MODEL, mode: 'pure' });
+        }
+
+        return NextResponse.json({ error: 'Invalid mode. Use "analyze", "synthesize", or "pure-synthesize"' }, { status: 400 });
 
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);

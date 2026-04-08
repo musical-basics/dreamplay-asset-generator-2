@@ -148,7 +148,8 @@ export async function POST(req: NextRequest) {
         const ai = getGoogleAI();
 
         if (modelId.startsWith('gemini-')) {
-            const isProductCampaign = campaignMode !== 'merch';
+        const isPure         = campaignMode === 'pure';
+        const isProductCampaign = !isPure && campaignMode !== 'merch';
 
             // Helper: interleave a text label directly before its image(s)
             // This gives Gemini an unambiguous identity mapping: label → pixels
@@ -187,8 +188,8 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            // 3. Structural ground truth — only for piano/product campaigns
-            if (isProductCampaign) {
+            // 3. Structural ground truth — only for piano/product campaigns (skipped in Pure mode)
+            if (isProductCampaign && !isPure) {
                 const perfectRefs = await loadPerfectGenRefs();
                 addInterleaved(
                     '\n\n=== PIANO GROUND TRUTH (Structural reference — match geometry exactly) ===',
@@ -196,9 +197,11 @@ export async function POST(req: NextRequest) {
                 );
             }
 
-            // 4. Brand assets — always included
-            const brandRefs = await loadBrandRefs();
-            addInterleaved('\n\n=== BRAND ASSETS (Apply logos and brand marks correctly) ===', brandRefs);
+            // 4. Brand assets — skipped in Pure mode
+            if (!isPure) {
+                const brandRefs = await loadBrandRefs();
+                addInterleaved('\n\n=== BRAND ASSETS (Apply logos and brand marks correctly) ===', brandRefs);
+            }
 
             // 5. General user-selected reference images
             if (Array.isArray(refImagePaths) && refImagePaths.length > 0) {
@@ -209,28 +212,35 @@ export async function POST(req: NextRequest) {
                 );
             }
 
-            // 6. Active constraints block — swapped based on campaign mode
+            // 6. Active constraints block
             const ratioHint = aspectRatio && aspectRatio !== '1:1'
                 ? ` Compose the image in ${aspectRatio} aspect ratio.`
                 : '';
             const brandInstruction = brandSuffix ? `\nBrand Style: ${brandSuffix}` : '';
             const priorityInstruction = prioritySuffix ? `\nPriority Notes: ${prioritySuffix}` : '';
 
-            const activeConstraint = isProductCampaign
-                ? DS60_MASTER_CONSTRAINT
-                : `
+            let finalPromptText: string;
+            if (isPure) {
+                // Pure Reference Mode: prompt is used exactly as given, no constraints appended
+                finalPromptText = `${prompt}${ratioHint}`;
+                console.log('[generate-image] PURE MODE — constraints bypassed, prompt used as-is');
+            } else {
+                const activeConstraint = isProductCampaign
+                    ? DS60_MASTER_CONSTRAINT
+                    : `
 ⛔⛔⛔ PREFLIGHT HARD BANS:
 1. ZERO yin-yang symbols anywhere in the image — not as decor, prop, logo, shadow, or pattern.
 2. This is a MERCH / APPAREL / LOOKBOOK campaign. Focus entirely on the human talent and the clothing/apparel. Do NOT generate a piano or keyboard unless the user's prompt explicitly requests one.
 3. No unauthorized text or watermarks.
 ⛔⛔⛔`;
 
-            const finalPromptText = `[USER PROMPT]\n${prompt}${ratioHint}
+                finalPromptText = `[USER PROMPT]\n${prompt}${ratioHint}
 
 [PRIORITIES & BRANDING]${priorityInstruction}${brandInstruction}
 
 [CRITICAL CONSTRAINTS]
 ${activeConstraint}`;
+            }
 
             parts.push({ text: finalPromptText });
 
