@@ -30,7 +30,9 @@ const MAX_POLL_ATTEMPTS = 36; // 36 × 5s = 3 minutes max
 
 export async function POST(req: NextRequest) {
     try {
-        const { prompt, aspectRatio, modelId, brandSuffix, prioritySuffix, campaignMode } = await req.json();
+        const { prompt, aspectRatio, modelId, brandSuffix, prioritySuffix, campaignMode, imageBase64, imageMimeType } = await req.json();
+        const isImageToVideo = !!imageBase64;
+
 
         if (!prompt) return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
 
@@ -56,22 +58,34 @@ export async function POST(req: NextRequest) {
         // Map aspect ratio (Kling uses "16:9" | "9:16" | "1:1")
         const klingAspect = aspectRatio || '16:9';
 
-        console.log('[kling] Submitting video task — model:', klingModel, '| aspect:', klingAspect);
+        const mode = isImageToVideo ? 'image2video' : 'text2video';
+        console.log('[kling] Submitting', mode, '— model:', klingModel, '| aspect:', klingAspect);
 
         // 1. Submit generation task
-        const submitRes = await fetch(`${KLING_BASE}/v1/videos/text2video`, {
+        const submitBody = isImageToVideo
+            ? {
+                model_name: klingModel,
+                prompt: fullPrompt,
+                image: imageBase64,           // base64 encoded source frame
+                duration: '5',
+                cfg_scale: 0.5,               // how much motion deviates from base image (0=locked, 1=free)
+              }
+            : {
+                model_name: klingModel,
+                prompt: fullPrompt,
+                aspect_ratio: klingAspect,
+                duration: '5',
+                mode: 'std',
+              };
+
+        const endpoint = isImageToVideo ? 'image2video' : 'text2video';
+        const submitRes = await fetch(`${KLING_BASE}/v1/videos/${endpoint}`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${jwt}`,
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                model_name: klingModel,
-                prompt: fullPrompt,
-                aspect_ratio: klingAspect,
-                duration: '5',  // 5 seconds (Kling tiers: 5 or 10)
-                mode: 'std',    // std | pro
-            }),
+            body: JSON.stringify(submitBody),
         });
 
         const submitData = await submitRes.json();
@@ -88,8 +102,8 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
             await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
 
-            const pollJwt = generateKlingJWT(); // regenerate to stay fresh
-            const pollRes = await fetch(`${KLING_BASE}/v1/videos/text2video/${taskId}`, {
+            const pollJwt = generateKlingJWT();
+            const pollRes = await fetch(`${KLING_BASE}/v1/videos/${endpoint}/${taskId}`, {
                 headers: { 'Authorization': `Bearer ${pollJwt}` },
             });
             const pollData = await pollRes.json();

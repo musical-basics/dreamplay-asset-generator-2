@@ -574,6 +574,15 @@ export default function HomePage() {
     const [isDragOverRefs, setIsDragOverRefs] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // ─── Reference Interpreter state
+    const [interpOpen, setInterpOpen] = useState(false);
+    const [interpAnalyzing, setInterpAnalyzing] = useState(false);
+    const [interpSynthesizing, setInterpSynthesizing] = useState(false);
+    const [interpAnalysis, setInterpAnalysis] = useState('');
+    const [interpModifier, setInterpModifier] = useState('');
+    const [interpSynthesis, setInterpSynthesis] = useState('');
+    const [interpSourcePath, setInterpSourcePath] = useState<string | null>(null);
+
     // ─── View state ───────────────────────────────────────────────────────────────
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
@@ -662,6 +671,67 @@ export default function HomePage() {
         setRoleRefs(prev => ({ ...prev, [role]: prev[role].includes(path) ? prev[role] : [...prev[role], path].slice(0, 2) }));
     const removeRoleRef = (role: RefRole, path: string) =>
         setRoleRefs(prev => ({ ...prev, [role]: prev[role].filter(p => p !== path) }));
+
+    // ─── Animate (Image-to-Video) state ───────────────────────────────────────────
+    const [animateJob, setAnimateJob] = useState<GenerationJob | null>(null);
+    const [animatePrompt, setAnimatePrompt] = useState('');
+    const [animating, setAnimating] = useState(false);
+
+    // ─── Reference Interpreter handlers ───────────────────────────────────────────
+    const analyzeRef = async (imagePath: string) => {
+        setInterpOpen(true);
+        setInterpAnalyzing(true);
+        setInterpAnalysis('');
+        setInterpSynthesis('');
+        setInterpSourcePath(imagePath);
+        try {
+            // Fetch the image and convert to base64
+            const imgRes = await fetch(imagePath);
+            const blob = await imgRes.blob();
+            const reader = new FileReader();
+            const base64 = await new Promise<string>((resolve, reject) => {
+                reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+
+            const res = await fetch('/api/interpret-reference', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'analyze', imageBase64: base64, imageMimeType: blob.type || 'image/jpeg' }),
+            });
+            const data = await res.json();
+            setInterpAnalysis(data.analysis || data.error || 'Analysis failed');
+        } catch (err) {
+            setInterpAnalysis(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setInterpAnalyzing(false);
+        }
+    };
+
+    const synthesizeRef = async () => {
+        if (!interpAnalysis || !interpModifier.trim()) return;
+        setInterpSynthesizing(true);
+        setInterpSynthesis('');
+        try {
+            const res = await fetch('/api/interpret-reference', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mode: 'synthesize',
+                    analysis: interpAnalysis,
+                    modifier: interpModifier,
+                    brandContext: brandSuffix || 'DreamPlay Pianos — cinematic, luxury, dark, premium',
+                }),
+            });
+            const data = await res.json();
+            setInterpSynthesis(data.synthesis || data.error || 'Synthesis failed');
+        } catch (err) {
+            setInterpSynthesis(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setInterpSynthesizing(false);
+        }
+    };
 
     const cycleRefTag = (id: string) =>
         setRefTags(prev => {
@@ -1014,7 +1084,57 @@ export default function HomePage() {
         });
     };
 
-    // ─── Route resolver (central) ─────────────────────────────────────────────────
+    // ─── Image-to-Video (Animate) handler ─────────────────────────────────────
+    const animateImage = async () => {
+        if (!animateJob?.resultUrl || !animatePrompt.trim()) return;
+        setAnimating(true);
+        try {
+            // Extract pure base64 from data URL (strip "data:image/png;base64," prefix)
+            const base64 = animateJob.resultUrl.startsWith('data:')
+                ? animateJob.resultUrl.split(',')[1]
+                : animateJob.resultUrl; // already raw b64 or URL
+
+            const res = await fetch('/api/generate-video-kling', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: animatePrompt,
+                    modelId: 'kling-1.6-pro',
+                    imageBase64: base64,
+                    campaignMode,
+                    brandSuffix: brandSuffix ?? undefined,
+                }),
+            });
+            const data = await res.json();
+            if (data.videoUrl) {
+                // Inject as a new completed job in the strip
+                const newJob: GenerationJob = {
+                    id: `anim-${Date.now()}`,
+                    batchId: animateJob.batchId,
+                    formatId: animateJob.formatId,
+                    formatLabel: `🎬 ${animateJob.formatLabel}`,
+                    modelId: 'kling-1.6-pro',
+                    modelName: 'Kling 1.6 Pro (Animate)',
+                    status: 'done',
+                    prompt: animatePrompt,
+                    resultUrl: data.videoUrl,
+                    createdAt: Date.now(),
+                    completedAt: Date.now(),
+                };
+                setJobs(prev => [newJob, ...prev]);
+                setActiveStrip(newJob.id);
+                setAnimateJob(null);
+                setAnimatePrompt('');
+            } else {
+                alert(data.error || 'Animation failed');
+            }
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'Animation failed');
+        } finally {
+            setAnimating(false);
+        }
+    };
+
     // Determines the correct API endpoint based on model and format type
     const resolveGenRoute = (modelId: string, formatType: string): string => {
         if (modelId.startsWith('grok')) return '/api/generate-image-aurora';
@@ -1573,6 +1693,18 @@ export default function HomePage() {
                                             </div>
                                             {/* position badge (1st = piano anchor) */}
                                             <div style={{ position: 'absolute', top: 1, right: 14, fontSize: '0.42rem', background: i === 0 ? 'var(--accent)' : 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 2, padding: '1px 3px', fontWeight: 700 }}>{i === 0 ? '①' : `${i+1}`}</div>
+                                            {/* ── 🔍 Interpret button */}
+                                            <button
+                                                onClick={e => { e.stopPropagation(); analyzeRef(path); }}
+                                                title="Interpret with Gemini — analyze this reference"
+                                                style={{
+                                                    position: 'absolute', bottom: 1, right: 14,
+                                                    border: 'none', borderRadius: 2, background: interpSourcePath === path ? 'var(--accent)' : 'rgba(0,0,0,0.7)',
+                                                    color: '#fff', fontSize: '0.42rem', padding: '1px 3px',
+                                                    cursor: 'pointer', lineHeight: 1.2, fontWeight: 700,
+                                                }}>
+                                                🔍
+                                            </button>
                                             <div onClick={() => toggleRefSelection(path)} style={{ position: 'absolute', top: 0, right: 0, background: 'rgba(0,0,0,0.75)', width: '12px', height: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.45rem', color: '#fff' }}>✕</div>
                                         </div>
                                     );
@@ -1598,6 +1730,92 @@ export default function HomePage() {
                             {activeRefCount > 0 && <button className="btn btn-ghost btn-sm" style={{ padding: '0.12rem 0.38rem', fontSize: '0.6rem', color: 'var(--accent-red)' }} onClick={() => { setSelectedRefPaths([]); setUploadedRefs([]); }}>Clear</button>}
                             <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" style={{ display: 'none' }} onChange={e => e.target.files && handleFiles(e.target.files)} />
                         </div>
+                        {/* ── Reference Interpreter Panel ── */}
+                        {interpOpen && (
+                            <div style={{
+                                marginTop: '0.5rem', borderTop: '1px solid var(--lr-border)',
+                                paddingTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.4rem',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>🔎 Reference Interpreter</span>
+                                    <button onClick={() => setInterpOpen(false)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.62rem' }}>✕</button>
+                                </div>
+
+                                {/* Box 1: Gemini Analysis */}
+                                <div>
+                                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 600 }}>① Gemini Sees</div>
+                                    <textarea
+                                        value={interpAnalyzing ? 'Analyzing...' : interpAnalysis}
+                                        onChange={e => setInterpAnalysis(e.target.value)}
+                                        readOnly={interpAnalyzing}
+                                        placeholder="Select a reference image and click 🔍 to analyze it"
+                                        style={{
+                                            width: '100%', minHeight: 72, resize: 'vertical',
+                                            background: 'rgba(255,255,255,0.04)', border: '1px solid var(--lr-border)',
+                                            borderRadius: 6, padding: '0.35rem 0.4rem', fontSize: '0.64rem',
+                                            color: interpAnalyzing ? 'var(--text-muted)' : 'var(--text-primary)',
+                                            lineHeight: 1.5, fontFamily: 'inherit',
+                                        }}
+                                    />
+                                </div>
+
+                                {/* Box 2: Human Modifier */}
+                                <div>
+                                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 600 }}>② Your Direction</div>
+                                    <textarea
+                                        value={interpModifier}
+                                        onChange={e => setInterpModifier(e.target.value)}
+                                        placeholder="What do you want to change or emphasize? (e.g. 'swap background to dark studio, add fog, keep the piano exactly as shown')"
+                                        style={{
+                                            width: '100%', minHeight: 56, resize: 'vertical',
+                                            background: 'rgba(255,255,255,0.04)', border: '1px solid var(--lr-border)',
+                                            borderRadius: 6, padding: '0.35rem 0.4rem', fontSize: '0.64rem',
+                                            color: 'var(--text-primary)', lineHeight: 1.5, fontFamily: 'inherit',
+                                        }}
+                                    />
+                                    <button
+                                        onClick={synthesizeRef}
+                                        disabled={!interpAnalysis || !interpModifier.trim() || interpSynthesizing}
+                                        style={{
+                                            marginTop: '0.25rem', padding: '0.28rem 0.7rem', fontSize: '0.64rem',
+                                            background: (!interpAnalysis || !interpModifier.trim()) ? 'rgba(255,255,255,0.06)' : 'var(--accent)',
+                                            border: 'none', borderRadius: 6, cursor: 'pointer',
+                                            color: (!interpAnalysis || !interpModifier.trim()) ? 'var(--text-muted)' : '#000',
+                                            fontWeight: 600, transition: 'all 0.15s',
+                                        }}
+                                    >
+                                        {interpSynthesizing ? '✨ Synthesizing...' : '✨ Synthesize'}
+                                    </button>
+                                </div>
+
+                                {/* Box 3: Synthesized Prompt */}
+                                {interpSynthesis && (
+                                    <div>
+                                        <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginBottom: '0.2rem', fontWeight: 600 }}>③ Final Prompt</div>
+                                        <textarea
+                                            value={interpSynthesis}
+                                            onChange={e => setInterpSynthesis(e.target.value)}
+                                            style={{
+                                                width: '100%', minHeight: 72, resize: 'vertical',
+                                                background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.35)',
+                                                borderRadius: 6, padding: '0.35rem 0.4rem', fontSize: '0.64rem',
+                                                color: 'var(--text-primary)', lineHeight: 1.5, fontFamily: 'inherit',
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => { setEnhancedPrompt(interpSynthesis); setInterpOpen(false); }}
+                                            style={{
+                                                marginTop: '0.25rem', padding: '0.28rem 0.7rem', fontSize: '0.64rem',
+                                                background: 'var(--accent)', border: 'none', borderRadius: 6,
+                                                cursor: 'pointer', color: '#000', fontWeight: 700,
+                                            }}
+                                        >
+                                            ✓ Use This Prompt
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         {/* Priority funnel + role reference drop zones — always visible */}
                         <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--lr-border)', paddingTop: '0.4rem' }}>
                                 <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.3rem' }}>Priority Order</div>
@@ -2344,6 +2562,15 @@ export default function HomePage() {
                                                 <button className={`strip-fb-btn bad${job.feedback === 'bad' ? ' active' : ''}`}
                                                     onClick={e => openFeedback(job, e)}
                                                     title="Flag issues">👎</button>
+                                                {/* Animate button — image jobs only */}
+                                                {job.resultUrl && !job.resultUrl.startsWith('http') && !job.resultUrl.endsWith('.mp4') && (
+                                                    <button
+                                                        className="strip-fb-btn"
+                                                        title="Animate this image with Kling 1.6 Pro"
+                                                        onClick={e => { e.stopPropagation(); setAnimateJob(job); setAnimatePrompt(''); }}
+                                                        style={{ fontSize: '0.7rem' }}
+                                                    >🎬</button>
+                                                )}
                                             </div>
                                         )}
                                         <div className="strip-label">{job.formatLabel}</div>
