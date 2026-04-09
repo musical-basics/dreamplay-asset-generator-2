@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, readFile, readdir, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { assetIndexer } from '@/lib/supabase';
 
 const GENERATED_DIR = path.join(process.cwd(), 'public', 'generated');
 
@@ -41,6 +42,27 @@ export async function POST(req: NextRequest) {
             savedAt: Date.now(),
         };
         await writeFile(metaFile, JSON.stringify(meta, null, 2));
+
+        // Dual-write to Supabase
+        const { error: dbErr } = await assetIndexer()
+          .from('merch_generations')
+          .upsert({
+            id:               jobId,
+            file_path:        `/generated/${dateFolder}/${jobId}.${ext}`,
+            file_name:        `${jobId}.${ext}`,
+            prompt:           prompt || null,
+            enhanced_prompt:  enhancedPrompt || null,
+            model_id:         modelId || null,
+            model_name:       modelName || null,
+            format_label:     formatLabel || null,
+            aspect_ratio:     aspectRatio || null,
+            ref_image_paths:  refImagePaths || [],
+            brand_suffix:     brandSuffix || null,
+            created_at:       createdAt || Date.now(),
+            saved_at:         Date.now(),
+            updated_at:       Date.now(),
+          }, { onConflict: 'id' });
+        if (dbErr) console.error('[save-generation] Supabase write failed:', dbErr.message);
 
         const publicPath = `/generated/${dateFolder}/${jobId}.${ext}`;
         return NextResponse.json({ success: true, path: publicPath });
@@ -129,6 +151,14 @@ export async function PATCH(req: NextRequest) {
         try { meta = JSON.parse(await readFile(metaFile, 'utf-8')); } catch { /* no sidecar yet */ }
         meta.feedback = feedback;
         await writeFile(metaFile, JSON.stringify(meta, null, 2));
+
+        // Sync feedback to Supabase
+        const { error: dbErr } = await assetIndexer()
+          .from('merch_generations')
+          .update({ feedback, updated_at: Date.now() })
+          .eq('id', jobId);
+        if (dbErr) console.error('[save-generation PATCH] Supabase update failed:', dbErr.message);
+
         return NextResponse.json({ success: true });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
