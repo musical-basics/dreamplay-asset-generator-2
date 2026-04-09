@@ -831,6 +831,22 @@ export default function HomePage() {
     const [savedOutputs, setSavedOutputs] = useState<Record<string, SavedOutput[]>>({});
     const [showOutputs, setShowOutputs] = useState(true);  // auto-expanded
     const [selectedOutput, setSelectedOutput] = useState<SavedOutput | null>(null);
+    const [promotedIds, setPromotedIds] = useState<Set<string>>(new Set());
+    const [promotingId, setPromotingId] = useState<string | null>(null);
+
+    const promoteGeneration = useCallback(async (jobId: string) => {
+        if (!jobId || promotedIds.has(jobId) || promotingId === jobId) return;
+        setPromotingId(jobId);
+        try {
+            const res = await fetch('/api/promote-generation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: jobId }),
+            });
+            if (res.ok) setPromotedIds(prev => new Set([...prev, jobId]));
+        } catch (e) { console.warn('[promote-generation]', e); }
+        setPromotingId(null);
+    }, [promotedIds, promotingId]);
 
     const loadSavedOutputs = useCallback(async () => {
         try {
@@ -2093,6 +2109,18 @@ export default function HomePage() {
                                                                     } catch { /* ignore */ }
                                                                 }}
                                                             >🎭</button>
+                                                            <button
+                                                                className="output-thumb-del"
+                                                                style={{
+                                                                    right: 14,
+                                                                    background: promotedIds.has(out.jobId ?? '') ? 'rgba(52,199,89,0.75)' : promotingId === (out.jobId ?? '') ? 'rgba(255,255,255,0.12)' : 'rgba(10,132,255,0.75)',
+                                                                    fontSize: '0.5rem',
+                                                                    borderRadius: 3,
+                                                                    padding: '1px 3px',
+                                                                }}
+                                                                onClick={async e => { e.stopPropagation(); if (out.jobId) await promoteGeneration(out.jobId); }}
+                                                                title={promotedIds.has(out.jobId ?? '') ? 'Promoted to asset library ✓' : 'Promote to asset_indexer.assets'}
+                                                            >{promotedIds.has(out.jobId ?? '') ? '✓' : promotingId === (out.jobId ?? '') ? '…' : '⬆'}</button>
                                                             <button className="output-thumb-del" onClick={async e => {
                                                                 e.stopPropagation();
                                                                 await fetch(`/api/save-generation?path=${encodeURIComponent(out.path)}`, { method: 'DELETE' });
