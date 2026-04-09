@@ -3,6 +3,21 @@ import { writeFile, readFile, readdir, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { assetIndexer } from '@/lib/supabase';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+
+const R2_BUCKET = process.env.R2_BUCKET_NAME ?? '';
+const R2_PUBLIC_BASE = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, '') ?? '';
+
+function getR2() {
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    },
+  });
+}
 
 const GENERATED_DIR = path.join(process.cwd(), 'public', 'generated');
 
@@ -43,12 +58,30 @@ export async function POST(req: NextRequest) {
         };
         await writeFile(metaFile, JSON.stringify(meta, null, 2));
 
-        // Dual-write to Supabase
+        // Upload to R2 and get public URL
+        const r2Key = `generated/${dateFolder}/${jobId}.${ext}`;
+        const r2PublicUrl = R2_PUBLIC_BASE ? `${R2_PUBLIC_BASE}/${r2Key}` : null;
+        if (R2_BUCKET && r2PublicUrl) {
+          try {
+            await getR2().send(new PutObjectCommand({
+              Bucket: R2_BUCKET,
+              Key: r2Key,
+              Body: imgBuf,
+              ContentType: ext === 'jpg' ? 'image/jpeg' : 'image/png',
+              CacheControl: 'public, max-age=31536000',
+            }));
+          } catch (r2Err) {
+            console.error('[save-generation] R2 upload failed:', (r2Err as Error).message);
+          }
+        }
+
+        // Dual-write to Supabase (store R2 URL if available, else local path)
+        const filePath = r2PublicUrl ?? `/generated/${dateFolder}/${jobId}.${ext}`;
         const { error: dbErr } = await assetIndexer()
           .from('merch_generations')
           .upsert({
             id:               jobId,
-            file_path:        `/generated/${dateFolder}/${jobId}.${ext}`,
+            file_path:        filePath,
             file_name:        `${jobId}.${ext}`,
             prompt:           prompt || null,
             enhanced_prompt:  enhancedPrompt || null,
@@ -64,7 +97,7 @@ export async function POST(req: NextRequest) {
           }, { onConflict: 'id' });
         if (dbErr) console.error('[save-generation] Supabase write failed:', dbErr.message);
 
-        const publicPath = `/generated/${dateFolder}/${jobId}.${ext}`;
+        const publicPath = r2PublicUrl ?? `/generated/${dateFolder}/${jobId}.${ext}`;
         return NextResponse.json({ success: true, path: publicPath });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);

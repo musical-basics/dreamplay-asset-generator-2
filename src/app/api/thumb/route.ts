@@ -5,60 +5,53 @@ import path from 'path';
 import crypto from 'crypto';
 
 const CACHE_DIR = path.join(process.cwd(), '.thumbcache');
-const THUMB_W = 320; // px — enough for the grid, tiny over the wire
-
-// Video extensions — never try to thumbnail these
+const THUMB_W = 320;
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.webm', '.m4v', '.avi', '.mkv']);
-// Max file size we'll pass to sharp (50 MB)
 const MAX_SHARP_BYTES = 50 * 1024 * 1024;
+const R2_PUBLIC_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/$/, '') ?? '';
 
 function cacheKey(urlPath: string, w: number): string {
-    return crypto
-        .createHash('sha1')
-        .update(`${urlPath}:${w}`)
-        .digest('hex') + '.webp';
+    return crypto.createHash('sha1').update(`${urlPath}:${w}`).digest('hex') + '.webp';
 }
 
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
-    const urlPath = searchParams.get('path');   // e.g. /product-images/folder/img.jpg
+    const urlPath = searchParams.get('path');
     const w = parseInt(searchParams.get('w') || String(THUMB_W), 10);
 
-    if (!urlPath) {
-        return NextResponse.json({ error: 'Missing path' }, { status: 400 });
+    if (!urlPath) return NextResponse.json({ error: 'Missing path' }, { status: 400 });
+
+    // ── R2-hosted assets: redirect to CDN URL (with image transform if supported) ──
+    // R2 public dev URLs don't support transforms, but the redirect avoids proxying
+    if (urlPath.startsWith('https://') || urlPath.startsWith('http://')) {
+        return NextResponse.redirect(urlPath, { status: 302 });
     }
 
-    // Primary: try public/ first (existing static files)
+    // ── Supabase CDN paths or future cloud paths ──
+    if (R2_PUBLIC_URL && urlPath.startsWith(R2_PUBLIC_URL)) {
+        return NextResponse.redirect(urlPath, { status: 302 });
+    }
+
+    // ── Local path: resolve from public/ or PRODUCT_IMAGES_DIR ──
     let fsPath = path.join(process.cwd(), 'public', decodeURIComponent(urlPath));
 
-    // Fallback: if not in public/ and path is /product-images/..., check PRODUCT_IMAGES_DIR
     if (!existsSync(fsPath) && process.env.PRODUCT_IMAGES_DIR && urlPath.startsWith('/product-images/')) {
         const rel = decodeURIComponent(urlPath).replace(/^\/product-images\//, '');
         const externalPath = path.join(process.env.PRODUCT_IMAGES_DIR, rel);
-        // Security: must stay within PRODUCT_IMAGES_DIR
         if (externalPath.startsWith(process.env.PRODUCT_IMAGES_DIR) && existsSync(externalPath)) {
             fsPath = externalPath;
         }
     }
 
-    if (!existsSync(fsPath)) {
-        return new NextResponse(null, { status: 404 });
-    }
+    if (!existsSync(fsPath)) return new NextResponse(null, { status: 404 });
 
-    // ── Videos: return 415 immediately — never buffer a video into RAM ────────
     const ext = path.extname(fsPath).toLowerCase();
-    if (VIDEO_EXTS.has(ext)) {
-        return new NextResponse(null, { status: 415, headers: { 'X-Thumb-Skip': 'video' } });
-    }
+    if (VIDEO_EXTS.has(ext)) return new NextResponse(null, { status: 415, headers: { 'X-Thumb-Skip': 'video' } });
 
-    // ── File size guard: skip sharp for huge files ────────────────────────────
     let fileSizeBytes = 0;
     try { fileSizeBytes = statSync(fsPath).size; } catch { /* ignore */ }
-    if (fileSizeBytes > MAX_SHARP_BYTES) {
-        return new NextResponse(null, { status: 413, headers: { 'X-Thumb-Skip': 'too-large' } });
-    }
+    if (fileSizeBytes > MAX_SHARP_BYTES) return new NextResponse(null, { status: 413, headers: { 'X-Thumb-Skip': 'too-large' } });
 
-    // ── Cache check ───────────────────────────────────────────────────────────
     const thumbName = cacheKey(urlPath, w);
     const thumbPath = path.join(CACHE_DIR, thumbName);
 
@@ -66,29 +59,18 @@ export async function GET(req: NextRequest) {
         try {
             const sharp = (await import('sharp')).default;
             await mkdir(CACHE_DIR, { recursive: true });
-            const buf = await sharp(fsPath)
-                .resize(w, null, { withoutEnlargement: true })
-                .webp({ quality: 80 })
-                .toBuffer();
+            const buf = await sharp(fsPath).resize(w, null, { withoutEnlargement: true }).webp({ quality: 80 }).toBuffer();
             await writeFile(thumbPath, buf);
         } catch (err) {
-            // sharp failed — return 415, NEVER buffer & stream the original
             console.warn('[thumb] sharp failed for', path.basename(fsPath), '—', String(err).slice(0, 120));
             return new NextResponse(null, { status: 415, headers: { 'X-Thumb-Skip': 'sharp-error' } });
         }
     }
 
-    // ── Serve cached thumbnail ────────────────────────────────────────────────
     const stream = createReadStream(thumbPath);
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(chunk as Buffer);
-    const buf = Buffer.concat(chunks);
-
-    return new NextResponse(buf, {
-        headers: {
-            'Content-Type': 'image/webp',
-            'Cache-Control': 'public, max-age=31536000, immutable',
-            'X-Thumb-Cache': 'hit',
-        },
+    return new NextResponse(Buffer.concat(chunks), {
+        headers: { 'Content-Type': 'image/webp', 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Thumb-Cache': 'hit' },
     });
 }
