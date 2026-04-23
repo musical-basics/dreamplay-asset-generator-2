@@ -1,4 +1,4 @@
-# DreamPlay Asset Generator
+# DreamPlay Image Assets Generator
 
 ## AI-powered product asset generator for DreamPlay Pianos
 

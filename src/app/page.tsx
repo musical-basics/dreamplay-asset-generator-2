@@ -40,6 +40,12 @@ const PRESET_DS60_STARTER =
 Lighting: cinematic studio — soft key light upper-left, subtle fill, controlled specular. Shallow depth of field, subject sharp.
 Materials: match the SPEC colors below exactly. Do not default to any specific color — use only what is specified.`;
 
+const PRESET_DS51_STARTER =
+`DreamPlay DS 5.1 — 88-key digital piano. The DS5.1™ (Donison-Steinbuhler) piano keyboard features an octave span of 5.112 inches (12.98 cm). This "child size", small-hand, ergonomically designed keyboard has a narrower width and smaller scale than standard 6.5-inch keyboards, making it easier to play for individuals with smaller hand spans.
+Luxury product photography, photorealistic rendering.
+Lighting: cinematic studio — soft key light upper-left, subtle fill, controlled specular. Shallow depth of field, subject sharp.
+Materials: match the SPEC colors below exactly. Do not default to any specific color — use only what is specified.`;
+
 const PRESET_NEGATIVE_GUARD =
 `STOP — do not render any of the following:
 ✗ Evenly-spaced black keys (wrong — must be 2-gap-3-gap groups)
@@ -108,7 +114,7 @@ const PRODUCT_SPECS: { group: string; key: string; options: string[] }[] = [
     { group: 'Camera angle', key: 'angle', options: ['Retain from ref', '3/4 view', 'Side profile', 'Top down', 'Front', 'Back'] },
     { group: 'Crop', key: 'crop', options: ['Close up', 'Full product', 'Wide', 'Far'] },
     // Piano
-    { group: 'Model', key: 'model', options: ['DS 5.5', 'DS 6.0', 'DS 6.5'] },
+    { group: 'Model', key: 'model', options: ['DS 5.1', 'DS 5.5', 'DS 6.0', 'DS 6.5'] },
     { group: 'Keys', key: 'numKeys', options: ['61 keys', '76 keys', '88 keys'] },
     { group: 'Body color', key: 'bodyColor', options: ['Black', 'White', 'Gold'] },
     { group: 'Body material', key: 'bodyMaterial', options: ['Matte', 'Gloss'] },
@@ -161,7 +167,7 @@ export default function HomePage() {
     const needsFixingInputRef = useRef<HTMLInputElement>(null);
 
     // ── Prompt preset toggles ───────────────────────────────────
-    const [useStarterPreset, setUseStarterPreset] = useState(false);
+    const [activeStarterPreset, setActiveStarterPreset] = useState<'ds60' | 'ds51' | 'none'>('none');
     const [useNegativeGuard, setUseNegativeGuard] = useState(true);  // on by default — key anti-hallucination guard
 
     // ── Product spec configurator ───────────────────────────────
@@ -282,7 +288,9 @@ export default function HomePage() {
         if (bs !== null) setUseBrandStyle(bs !== 'off');
         // Preset toggles
         const starter = localStorage.getItem('dp_preset_starter');
-        if (starter === 'on') setUseStarterPreset(true);
+        if (starter === 'ds60' || starter === 'on') setActiveStarterPreset('ds60');
+        else if (starter === 'ds51') setActiveStarterPreset('ds51');
+        else setActiveStarterPreset('none');
         const guard = localStorage.getItem('dp_preset_guard');
         if (guard === 'on') setUseNegativeGuard(true);
         // Product specs
@@ -293,7 +301,7 @@ export default function HomePage() {
         if (fmts) { try { setSelectedFormats(new Set(JSON.parse(fmts))); } catch { /* ignore */ } }
     }, []);
     useEffect(() => { localStorage.setItem('dp_brand_style', useBrandStyle ? 'on' : 'off'); }, [useBrandStyle]);
-    useEffect(() => { localStorage.setItem('dp_preset_starter', useStarterPreset ? 'on' : 'off'); }, [useStarterPreset]);
+    useEffect(() => { localStorage.setItem('dp_preset_starter', activeStarterPreset); }, [activeStarterPreset]);
     useEffect(() => { localStorage.setItem('dp_preset_guard', useNegativeGuard ? 'on' : 'off'); }, [useNegativeGuard]);
     useEffect(() => { localStorage.setItem('dp_product_specs', JSON.stringify(productSpecs)); }, [productSpecs]);
     useEffect(() => { localStorage.setItem('dp_selected_formats', JSON.stringify(Array.from(selectedFormats))); }, [selectedFormats]);
@@ -1251,7 +1259,7 @@ export default function HomePage() {
         setJobs(prev => [...newJobs, ...prev]);
         const basePrompt = enhancedPrompt || prompt;
         const presetPrefix = [
-            useStarterPreset ? PRESET_DS60_STARTER : '',
+            activeStarterPreset === 'ds60' ? PRESET_DS60_STARTER : activeStarterPreset === 'ds51' ? PRESET_DS51_STARTER : '',
             useNegativeGuard ? PRESET_NEGATIVE_GUARD : '',
         ].filter(Boolean).join('\n\n');
         const specSuffix = buildSpecSuffix();
@@ -2553,10 +2561,16 @@ export default function HomePage() {
                                     <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
                                         <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '0.15rem' }}>Presets:</span>
                                         <button
-                                            className={`brand-tag${useStarterPreset ? ' active' : ''}`}
+                                            className={`brand-tag${activeStarterPreset === 'ds60' ? ' active' : ''}`}
                                             title="Toggle DS 6.0 generation starter — auto-prepended to every generation"
-                                            onClick={() => setUseStarterPreset(v => !v)}>
+                                            onClick={() => setActiveStarterPreset(v => v === 'ds60' ? 'none' : 'ds60')}>
                                             ⚡ DS 6.0 Starter
+                                        </button>
+                                        <button
+                                            className={`brand-tag${activeStarterPreset === 'ds51' ? ' active' : ''}`}
+                                            title="Toggle DS 5.1 generation starter — ergonomically designed smaller keyboard"
+                                            onClick={() => setActiveStarterPreset(v => v === 'ds51' ? 'none' : 'ds51')}>
+                                            ⚡ DS 5.1 Starter
                                         </button>
                                         <button
                                             className={`brand-tag${useNegativeGuard ? ' active' : ''}`}
@@ -2583,7 +2597,7 @@ export default function HomePage() {
                                     {(() => {
                                         const base = enhancedPrompt || prompt || '(your prompt here)';
                                         const presetParts = [
-                                            useStarterPreset ? PRESET_DS60_STARTER : '',
+                                            activeStarterPreset === 'ds60' ? PRESET_DS60_STARTER : activeStarterPreset === 'ds51' ? PRESET_DS51_STARTER : '',
                                             useNegativeGuard ? PRESET_NEGATIVE_GUARD : '',
                                         ].filter(Boolean);
                                         // Use SPEC_EXPANSIONS — the same full text actually sent to Gemini
